@@ -114,6 +114,9 @@ class Scene:
         """Place a node's children inside its content box, then recurse into them."""
         layout = node.layout
         padding = _px(layout.padding, metrics) if layout is not None else 0
+        # Kept on the node so hit-testing can find the content origin without the
+        # metrics; it is solved layout state, like the rect.
+        node._padding = padding
         content_w = max(0, node.rect[2] - 2 * padding)
         content_h = max(0, node.rect[3] - 2 * padding)
         flow = [child for child in node.children if child.anchor is None]
@@ -234,3 +237,41 @@ class Scene:
         else:
             x, y = (content_w - width) // 2, (content_h - height) // 2
         return (x, y, width, height)
+
+    # -- hit-test: front-to-back --------------------------------------------
+
+    def hit_test(self, x, y):
+        """Return the deepest visible node containing the region-local point.
+
+        The walk is front-to-back: higher ``z`` first, and a later-declared sibling on
+        top of an earlier one. A subtree result always beats its container, which is
+        what makes the returned node the deepest one. Call ``reflow`` first; an
+        unsolved scene has empty rects and hits nothing.
+        """
+        root = self._root
+        if root is None:
+            return None
+        return self._hit(root, float(x), float(y), 0.0, 0.0)
+
+    def _hit(self, node, x, y, origin_x, origin_y):
+        """Recursive front-to-back descent. ``origin_*`` is the parent content origin."""
+        if not node.visible:
+            return None
+        left = origin_x + node.rect[0]
+        bottom = origin_y + node.rect[1]
+        right = left + node.rect[2]
+        top = bottom + node.rect[3]
+        inside = left <= x < right and bottom <= y < top
+        if node.clip and not inside:
+            # A clipped node hides everything outside its box, subtree included.
+            return None
+        padding = getattr(node, "_padding", 0)
+        content_x = left + padding
+        content_y = bottom + padding
+        children = node.children
+        order = sorted(range(len(children)), key=lambda index: (children[index].z, index), reverse=True)
+        for index in order:
+            found = self._hit(children[index], x, y, content_x, content_y)
+            if found is not None:
+                return found
+        return node if inside else None
