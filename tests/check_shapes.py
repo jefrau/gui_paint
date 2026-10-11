@@ -80,6 +80,18 @@ elif isinstance(Canvas, type) and callable(getattr(Canvas, "rounded_rect", None)
     drawn.circle(0.0, 0.0, 4.0, (1.0, 1.0, 1.0, 1.0))
     check("a circle caches its own batch", len(drawn._batches) == 3, str(len(drawn._batches)))
 
+    # A shape is cached and built at whole pixels, so a fractional size and its rounded
+    # twin must share both the key and the geometry they were built from.
+    twisted = Canvas()
+    twisted.rounded_rect(0.0, 0.0, 20.4, 10.4, 3.2, (1.0, 0.0, 0.0, 1.0))
+    twisted.rounded_rect(9.0, 9.0, 20.0, 10.0, 3.0, (0.0, 1.0, 0.0, 1.0))
+    check("a fractional size and its rounded twin share one batch",
+          len(twisted._batches) == 1, f"{sorted(map(str, twisted._batches))}")
+    twisted.circle(0.0, 0.0, 4.4, (1.0, 1.0, 1.0, 1.0))
+    twisted.circle(0.0, 0.0, 4.0, (1.0, 1.0, 1.0, 1.0))
+    check("a fractional radius and its rounded twin share one batch",
+          len(twisted._batches) == 2, f"{sorted(map(str, twisted._batches))}")
+
     width = height = 16
     background = (1.0, 0.0, 0.0, 1.0)
     filled = (0.0, 1.0, 0.0, 1.0)

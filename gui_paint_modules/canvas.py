@@ -209,15 +209,19 @@ class Canvas:
     def rounded_rect(self, x, y, w, h, radius, color):
         """Fill a rectangle with rounded corners. Geometry is cached by shape.
 
-        The geometry is built at its real size and drawn unscaled, because scaling one
-        unit shape would stretch a round corner into an ellipse.
+        The size and the radius are rounded to whole pixels once, and both the cache key
+        and the vertices are built from those whole values, so the key can never describe
+        a different shape than the one that was tessellated. The geometry is drawn
+        unscaled, because scaling one unit shape would stretch a corner into an ellipse.
         """
-        self.shape(("round", w, h, radius), rounded_rect_triangles(w, h, radius),
-                   x, y, 1.0, 1.0, color)
+        width, height, corner = int(round(w)), int(round(h)), int(round(radius))
+        self.shape(("round", width, height, corner),
+                   rounded_rect_triangles(width, height, corner), x, y, 1.0, 1.0, color)
 
     def circle(self, cx, cy, radius, color):
-        """Fill a circle with a solid color. Geometry is cached by radius."""
-        self.shape(("circle", radius), circle_triangles(radius), cx, cy, 1.0, 1.0, color)
+        """Fill a circle with a solid color. Geometry is cached by whole-pixel radius."""
+        size = int(round(radius))
+        self.shape(("circle", size), circle_triangles(size), cx, cy, 1.0, 1.0, color)
 
     def text(self, x, y, text, size, color, align=None):
         """Draw a text label at a logical ``size``, in this canvas's local space.
