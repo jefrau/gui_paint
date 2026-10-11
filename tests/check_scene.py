@@ -11,7 +11,7 @@ import bpy
 from checkkit import banner, check, finish
 
 from gui_paint_modules import coords
-from gui_paint_modules.layout import Size
+from gui_paint_modules.layout import Size, VBox
 from gui_paint_modules.nodes import Node
 from gui_paint_modules.scene import Scene
 
@@ -110,6 +110,18 @@ if callable(getattr(Scene, "draw", None)) and callable(getattr(Node, "draw", Non
     check("the clip is popped again", len(popped) == 1, str(canvas.calls))
     check("the node enters its own box before drawing",
           ("push_transform", 5, 5, 1.0, 1.0) in canvas.calls, str(canvas.calls))
+
+    # A container with padding enters its content box before its children.
+    sink = []
+    holder = _painter("holder", sink, layout=VBox(padding=7))
+    holder.add(_painter("kid", sink, size=Size.fixed(10)))
+    scene = Scene(holder)
+    scene.reflow(BOX, METRICS)
+    canvas = _RecorderCanvas()
+    scene.draw(canvas)
+    check("a padded container pushes its content inset",
+          ("push_transform", 7, 7, 1.0, 1.0) in canvas.calls, str(canvas.calls))
+    check("its child is drawn inside the content box", sink == ["holder", "kid"], str(sink))
 
 
 # -- Surface wiring ---------------------------------------------------------

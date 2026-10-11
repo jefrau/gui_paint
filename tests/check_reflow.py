@@ -91,6 +91,32 @@ if isinstance(Scene, type):
     check("bottom_left pins to the near corner with its margin",
           bottom_left.rect == (8.0, 8.0, 10.0, 10.0), repr(bottom_left.rect))
 
+    # E2 — the remaining anchor branches, and an anchored child sized by percent.
+    root = Node()
+    placements = (
+        ("top_left", Anchor.top_left(), (0.0, 190.0, 10.0, 10.0)),
+        ("bottom_right", Anchor.bottom_right(), (190.0, 0.0, 10.0, 10.0)),
+        ("top", Anchor.top(margin=3), (95.0, 187.0, 10.0, 10.0)),
+        ("bottom", Anchor.bottom(margin=3), (95.0, 3.0, 10.0, 10.0)),
+        ("left", Anchor.left(margin=3), (3.0, 95.0, 10.0, 10.0)),
+        ("right", Anchor.right(margin=3), (187.0, 95.0, 10.0, 10.0)),
+    )
+    pinned = []
+    for _, anchor, _ in placements:
+        node = Node(size=Size.fixed(10), anchor=anchor)
+        root.add(node)
+        pinned.append(node)
+    _solved(root)
+    for (label, _, expected), node in zip(placements, pinned):
+        check(f"anchor {label} places the node", node.rect == expected, repr(node.rect))
+
+    root = Node()
+    half = Node(size=Size.percent(0.5), anchor=Anchor.center())
+    root.add(half)
+    _solved(root)
+    check("an anchored percent node takes half the content box on both axes",
+          half.rect == (50.0, 50.0, 100.0, 100.0), repr(half.rect))
+
     # F — an auto container takes its intrinsic size and lays its own children out.
     box = Node(layout=VBox(gap=2, padding=3))
     box.add(Node(size=Size.fixed(10)))
@@ -115,6 +141,33 @@ if isinstance(Scene, type):
     root.add(child)
     _solved(root)
     check("align center centers the cross axis", child.rect == (95.0, 0.0, 10.0, 10.0), repr(child.rect))
+
+    # H2 — stretch and end, on both axes.
+    root = Node(layout=VBox(align="stretch"))
+    child = Node(size=Size.fixed(10))
+    root.add(child)
+    _solved(root)
+    check("align stretch fills the VBox cross axis", child.rect == (0.0, 0.0, 200.0, 10.0), repr(child.rect))
+
+    root = Node(layout=VBox(align="end"))
+    child = Node(size=Size.fixed(10))
+    root.add(child)
+    _solved(root)
+    check("align end pushes the VBox child to the far cross edge",
+          child.rect == (190.0, 0.0, 10.0, 10.0), repr(child.rect))
+
+    root = Node(layout=HBox(align="stretch"))
+    child = Node(size=Size.fixed(10))
+    root.add(child)
+    _solved(root)
+    check("align stretch fills the HBox cross axis", child.rect == (0.0, 0.0, 10.0, 200.0), repr(child.rect))
+
+    root = Node(layout=HBox(align="end"))
+    child = Node(size=Size.fixed(10))
+    root.add(child)
+    _solved(root)
+    check("align end pushes the HBox child to the far cross edge",
+          child.rect == (0.0, 190.0, 10.0, 10.0), repr(child.rect))
 
     # I — the root always takes the region box, whatever its own policy says.
     root = Node(size=Size.fixed(50), layout=VBox())
