@@ -147,12 +147,13 @@ Rules:
 ```python
 # coords.py (illustrative)
 
-def logical_to_px(value, ui_scale):
+def logical_to_px(value, ui_scale, base_factor):
     """Convert a logical unit value to pixels for the current UI scale.
-    Logical units keep layouts stable across DPI settings.
+    Logical units keep layouts stable across DPI settings: base_factor carries
+    the display's pixels per logical unit.
     """
     # Returns an int pixel value.
-    return int(round(value * ui_scale))
+    return int(round(value * ui_scale * base_factor))
 
 
 def region_rect(region):
