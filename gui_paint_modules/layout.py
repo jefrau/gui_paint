@@ -64,6 +64,10 @@ class Anchor:
     """
 
     def __init__(self, corner, margin=0.0):
+        if corner not in _CORNERS:
+            # Without this, a misspelled corner would fall through the placement chain
+            # to its center branch and move the widget in silence.
+            raise ValueError(f"corner must be one of {_CORNERS}, got {corner!r}")
         if margin < 0:
             raise ValueError(f"anchor margin must not be negative, got {margin!r}")
         self.corner = corner

@@ -57,6 +57,11 @@ if layout is not None:
         check("Anchor default margin is zero", Anchor.center().margin == 0.0)
         check("Anchor keeps its margin", Anchor.bottom_right(margin=8).margin == 8.0)
         check("Anchor rejects a negative margin", _raises_value_error(lambda: Anchor.top_left(margin=-1)))
+        corners = ("top_left", "top_right", "bottom_left", "bottom_right",
+                   "top", "bottom", "left", "right", "center")
+        built = [getattr(Anchor, name)().corner for name in corners]
+        check("every anchor corner builds", built == list(corners), str(built))
+        check("Anchor rejects an unknown corner", _raises_value_error(lambda: Anchor("bottom_leftt")))
 
     for name, Flow, direction in (("VBox", VBox, "vertical"), ("HBox", HBox, "horizontal")):
         if not isinstance(Flow, type):
