@@ -174,6 +174,19 @@ if isinstance(Scene, type):
     _solved(root)
     check("the root always takes the region box", root.rect == (0.0, 0.0, 200.0, 200.0), repr(root.rect))
 
+    # I2 — a container with children but no flow layout must still cover them, and a leaf
+    # with neither keeps measuring through Node.measure.
+    root = Node()
+    loose = Node()
+    loose.add(Node(size=Size.fixed(24)))
+    loose.add(Node(size=Size.fixed(10), anchor=Anchor.top_right()))
+    root.add(loose)
+    _solved(root)
+    check("a container without a flow measures its children",
+          tuple(loose.rect[2:]) == (24.0, 24.0), repr(loose.rect))
+    check("a childless leaf without a flow still measures nothing",
+          loose.children[0].measure(METRICS) == (0.0, 0.0))
+
     # J — dirty tracking: clean reflow is a no-op, and every change re-solves.
     root = Node(layout=VBox())
     scene = _solved(root)

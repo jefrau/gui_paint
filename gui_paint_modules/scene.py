@@ -123,8 +123,13 @@ class Scene:
             return (0, 0)
         layout = node.layout
         if layout is None:
-            # A leaf has no flow to size it, so the widget itself reports its content.
-            return node.measure(metrics)
+            children = node.children
+            if not children:
+                # A leaf has no flow to size it, so the widget itself reports its content.
+                return node.measure(metrics)
+            # No flow, but the children still have to fit inside the box, so cover them.
+            outer = [self._outer(child, metrics) for child in children]
+            return (max(width for width, _ in outer), max(height for _, height in outer))
         flow = [child for child in node.children if child.anchor is None]
         padding = _px(layout.padding, metrics)
         if not flow:
