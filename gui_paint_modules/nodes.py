@@ -102,6 +102,17 @@ class Node:
         """
         return self._rect
 
+    # -- measure ------------------------------------------------------------
+
+    def measure(self, metrics):
+        """Return this node's intrinsic content size, in pixels, for a layout solve.
+
+        A bare node has no content of its own and measures (0, 0); a widget overrides
+        this so its natural size comes from the widget. ``metrics`` is passed in, so the
+        solve never reads Blender state here and stays pure.
+        """
+        return (0.0, 0.0)
+
     # -- drawing ------------------------------------------------------------
 
     def draw(self, canvas):

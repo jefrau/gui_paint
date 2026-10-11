@@ -123,7 +123,8 @@ class Scene:
             return (0, 0)
         layout = node.layout
         if layout is None:
-            return (0, 0)
+            # A leaf has no flow to size it, so the widget itself reports its content.
+            return node.measure(metrics)
         flow = [child for child in node.children if child.anchor is None]
         padding = _px(layout.padding, metrics)
         if not flow:
