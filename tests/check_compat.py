@@ -9,7 +9,7 @@ The cache smoke test can only run where a background process reaches the GPU, so
 records a skip there instead of a failure.
 """
 
-from checkkit import REPO, banner, check, finish, skip
+from checkkit import REPO, banner, check, finish, gpu_reachable, skip
 
 from gui_paint_modules import compat, shaders
 
@@ -46,17 +46,11 @@ check("no module outside compat.py reads the Blender version", not offenders, st
 uniform_color = getattr(shaders, "uniform_color", None)
 check("shaders.uniform_color is defined", callable(uniform_color))
 if callable(uniform_color):
-    try:
+    if gpu_reachable() is None:
+        skip("this background build cannot reach the GPU, so the shader cache stays unverified here")
+    else:
         first = uniform_color()
         second = uniform_color()
-    except Exception as exc:
-        import gpu
-
-        if hasattr(gpu, "init"):
-            check("shader cache builds a handle", False, f"{type(exc).__name__}: {exc}")
-        else:
-            skip(f"shader cache unreachable in this background build ({type(exc).__name__})")
-    else:
         check("shader cache returns one handle", first is second)
         check(
             "shader handle is a GPUShader",

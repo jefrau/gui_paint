@@ -4,9 +4,10 @@ The M1 design rests on one measured difference: 5.2 exposes `gpu.init` and can b
 shaders and batches from a background process, while 4.2 exposes no `gpu.init` and
 refuses every GPU call.
 
-Where `gpu.init` exists the check asserts that the drawing path really works, so a
-regression fails the suite. Where it does not, the limitation is recorded as a skip
-instead of being printed as a pass.
+This is the check that owns the import assertion: a broken `gpu` module fails here.
+Where `gpu.init` exists the drawing path is asserted to really work, so a regression
+fails the suite; where it does not, the limitation is recorded as a skip instead of
+being printed as a pass.
 """
 
 import json
@@ -27,16 +28,6 @@ def record(key, fn):
         report[key] = f"{type(exc).__name__}: {exc}"
 
 
-def make_batch():
-    """Build the six-vertex triangle list Canvas.rect draws."""
-    fmt = gpu.types.GPUVertFormat()
-    fmt.attr_add(id="pos", comp_type="F32", len=2, fetch_mode="FLOAT")
-    buf = gpu.types.GPUVertBuf(len=6, format=fmt)
-    buf.attr_fill(id="pos", data=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)] * 2)
-    gpu.types.GPUBatch(type="TRIS", buf=buf)
-    return "ok"
-
-
 banner()
 
 try:
@@ -45,8 +36,21 @@ except Exception as exc:
     check("gpu imports", False, f"{type(exc).__name__}: {exc}")
 else:
     check("gpu imports", True)
-    if hasattr(gpu, "init"):
+
+    if not hasattr(gpu, "init"):
+        skip("this build exposes no gpu.init, so the GPU is unreachable in background")
+    else:
         gpu.init()
+
+        def make_batch():
+            """Build the six-vertex triangle list Canvas.rect draws."""
+            fmt = gpu.types.GPUVertFormat()
+            fmt.attr_add(id="pos", comp_type="F32", len=2, fetch_mode="FLOAT")
+            buf = gpu.types.GPUVertBuf(len=6, format=fmt)
+            buf.attr_fill(id="pos", data=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)] * 2)
+            gpu.types.GPUBatch(type="TRIS", buf=buf)
+            return "ok"
+
         record("shader.UNIFORM_COLOR", lambda: type(gpu.shader.from_builtin("UNIFORM_COLOR")).__name__)
         record("batch", make_batch)
         check(
@@ -59,8 +63,6 @@ else:
             report.get("batch") == "ok",
             str(report.get("batch")),
         )
-    else:
-        skip("this build exposes no gpu.init, so the GPU is unreachable in background")
 
 print("GPU_PROBE " + json.dumps(report, sort_keys=True))
 finish("gpu")

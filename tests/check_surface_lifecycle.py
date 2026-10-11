@@ -1,14 +1,16 @@
-"""Verify the Surface lifecycle: register once, disable cleanly, own one area.
+"""Verify the Surface lifecycle: register once, disable cleanly, own one area, draw.
 
-Background mode has no real area, so the check injects a stub area and swaps
-`bpy.types.SpaceView3D` for a recorder — the same technique
-`tests/check_import_contract.py` uses to observe registration.
+Background mode has no real area, so the check injects a stub area, swaps
+`bpy.types.SpaceView3D` for a recorder, and swaps `bpy.context` for a holder whose
+`area` it controls. Both are module attributes, so both are restored before the check
+finishes.
 """
 
 import bpy
 
 from checkkit import banner, check, finish
 
+from gui_paint_modules.canvas import Canvas
 from gui_paint_modules.surface import Surface
 
 
@@ -24,6 +26,13 @@ class _Area:
 
     def tag_redraw(self):
         self.redraws += 1
+
+
+class _Context:
+    """Stands in for bpy.context, so the draw callback sees a chosen area."""
+
+    def __init__(self, area):
+        self.area = area
 
 
 class _SpaceRecorder:
@@ -48,8 +57,11 @@ for method in ("enable", "disable", "owns"):
     check(f"Surface.{method} is defined", callable(getattr(Surface, method, None)))
 
 recorder = _SpaceRecorder()
-original = getattr(bpy.types, "SpaceView3D", None)
+original_space = getattr(bpy.types, "SpaceView3D", None)
+original_context = bpy.context
+context = _Context(None)
 bpy.types.SpaceView3D = recorder
+bpy.context = context
 try:
     area = _Area(4242)
     other = _Area(777)
@@ -75,8 +87,22 @@ try:
 
     painted = []
     surface.draw = painted.append
+
+    context.area = None
     surface._draw()
-    check("drawing without an area paints nothing", not painted, str(painted))
+    check("drawing with no area present paints nothing", not painted, str(len(painted)))
+
+    context.area = other
+    surface._draw()
+    check("drawing in another area paints nothing", not painted, str(len(painted)))
+
+    context.area = area
+    surface._draw()
+    check("drawing in the bound area paints once", len(painted) == 1, str(len(painted)))
+    check("the callback receives a Canvas", bool(painted) and isinstance(painted[0], Canvas))
+
+    surface._draw()
+    check("the canvas is reused between draws", len(painted) == 2 and painted[0] is painted[1])
 
     surface.disable()
     check("disable removes the handler", len(recorder.removed) == 1, str(len(recorder.removed)))
@@ -96,7 +122,8 @@ try:
     check("an interactive surface starts no router in M1", interactive._router is None)
     interactive.disable()
 finally:
-    if original is not None:
-        bpy.types.SpaceView3D = original
+    bpy.context = original_context
+    if original_space is not None:
+        bpy.types.SpaceView3D = original_space
 
 finish("surface")

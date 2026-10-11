@@ -36,6 +36,19 @@ def skip(reason: str) -> None:
     skips.append(reason)
 
 
+def gpu_reachable():
+    """Return the `gpu` module where a background process can use it, else None.
+
+    Blender 4.2 exposes no ``gpu.init`` and refuses every GPU call from a background
+    process, so this is the gate the GPU-dependent checks share.
+    """
+    try:
+        import gpu
+    except Exception:
+        return None
+    return gpu if hasattr(gpu, "init") else None
+
+
 def finish(kind: str) -> None:
     """Print the skips, then exit non-zero if anything failed."""
     if skips:
