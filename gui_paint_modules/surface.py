@@ -2,7 +2,9 @@
 
 Creating a surface does nothing. ``enable()`` registers one draw callback for the
 chosen space type and region; ``disable()`` removes it and forgets the area, so
-nothing stays registered or live.
+nothing stays registered or live. An interactive surface also registers with the
+window's router, which stands the input modal up on the first one and takes it
+down on the last, so one window runs one router no matter how many surfaces it has.
 
 Both ends ask the bound area to repaint. A draw handler only runs when Blender
 repaints the region, so without that request an enabled overlay can stay invisible
@@ -17,6 +19,7 @@ import bpy
 
 from . import coords
 from .canvas import Canvas
+from .input.router import router_for
 from .scene import Scene
 
 
@@ -47,15 +50,22 @@ class Surface:
         if self.canvas is None:
             self.canvas = Canvas()
         self.canvas.prepare()
+        if self.interactive:
+            self._router = router_for(bpy.context.window)
+            if self._router is not None:
+                self._router.register(self)
         self._tag_redraw()
 
     def disable(self):
-        """Remove drawing. The surface becomes invisible and inert."""
+        """Remove drawing and input. The surface becomes invisible and inert."""
         if self._handle is None:
             return
         space = getattr(bpy.types, self.space_type)
         space.draw_handler_remove(self._handle, self.region_type)
         self._handle = None
+        if self._router is not None:
+            self._router.unregister(self)
+            self._router = None
         self._area_ptr = None
         self._tag_redraw()
         self._area = None

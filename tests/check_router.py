@@ -187,4 +187,36 @@ check("the default target is the newest surface",
       consumed is True and newer_probe.hover_states == [True], str(newer_probe.hover_states))
 check("the older surface is left untouched", older_probe.hover_states == [], str(older_probe.hover_states))
 
+# -- one router per window --------------------------------------------------
+
+import gui_paint_modules.input.router as router_module
+
+
+class _Window:
+    """Stand-in for a Blender window: an identity for the router registry."""
+
+    def __init__(self, pointer):
+        self._pointer = pointer
+
+    def as_pointer(self):
+        return self._pointer
+
+
+saved_launch = router_module._launch_modal
+router_module._ROUTERS.clear()
+router_module._MODALS.clear()
+router_module._launch_modal = lambda router: None
+try:
+    window_a = _Window(5001)
+    window_b = _Window(5002)
+    first = router_module.router_for(window_a)
+    check("router_for builds a router on first ask", isinstance(first, InputRouter))
+    check("router_for is stable for one window", router_module.router_for(window_a) is first)
+    check("another window gets its own router", router_module.router_for(window_b) is not first)
+    check("a windowless ask returns None", router_module.router_for(None) is None)
+finally:
+    router_module._launch_modal = saved_launch
+    router_module._ROUTERS.clear()
+    router_module._MODALS.clear()
+
 finish("router")

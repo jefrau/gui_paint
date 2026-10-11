@@ -4,12 +4,21 @@ The router is the single entry point for the input loop: it normalizes a raw eve
 finds the interactive node under the pointer, and drives its hover, press and click
 hooks. An event that lands on nothing interactive passes through to Blender untouched.
 
-It reads no Blender state of its own, so it can be checked headless. The surface it
-dispatches to and the "which surface is under the pointer" resolver are both seams the
-caller injects; the real window resolver is wired later.
+One router serves one window, and every interactive surface in the window shares it. The
+dispatch reads no Blender state and is checkable headless; the modal that feeds it and the
+"which surface is under the pointer" resolver are injected, and the per-window registry
+and the modal operator live at the end of this module.
 """
 
+import bpy
+
 from .events import MOVE, PRESS, RELEASE, classify
+
+# One router and, at most, one modal per window. Both are keyed by the window pointer, so
+# a closed window can never make a lookup raise.
+_ROUTERS = {}
+_MODALS = set()
+_operator_registered = False
 
 
 def is_interactive(node):
@@ -22,6 +31,61 @@ def is_interactive(node):
     return node is not None and callable(getattr(node, "on_click", None))
 
 
+def router_for(window):
+    """Return the one router for a window, creating it on first request.
+
+    One router per window: every interactive surface in the same window shares it, so a
+    window never runs two modals pulling at the same events.
+
+    Returns None when there is no window to key on, which is the case in a background
+    process with no drawn interface.
+    """
+    if window is None:
+        return None
+    pointer = window.as_pointer()
+    router = _ROUTERS.get(pointer)
+    if router is None:
+        router = InputRouter(window=window)
+        _ROUTERS[pointer] = router
+    return router
+
+
+def _active_router(window):
+    """The router registered for a window, or None. A lookup, never a creation."""
+    if window is None:
+        return None
+    return _ROUTERS.get(window.as_pointer())
+
+
+def _forget_window(window):
+    """Drop a window's router and its modal marker once the modal has stopped."""
+    if window is None:
+        return
+    pointer = window.as_pointer()
+    _ROUTERS.pop(pointer, None)
+    _MODALS.discard(pointer)
+
+
+def _register_operator():
+    """Register the modal operator class on first use, never at import time."""
+    global _operator_registered
+    if _operator_registered:
+        return
+    bpy.utils.register_class(_RouterModal)
+    _operator_registered = True
+
+
+def _launch_modal(router):
+    """Ask Blender to run the modal that feeds this router's window.
+
+    This is the input layer's one Blender-specific call, kept alone so a check can replace
+    it and so the exact invocation has a single home. The modal's live event loop is what
+    the M4 manual step observes, because a background process has no events to feed it.
+    """
+    _register_operator()
+    bpy.ops.gui_paint.input_router("INVOKE_DEFAULT")
+
+
 class InputRouter:
     """Routes mouse events to the interactive nodes of the registered surfaces.
 
@@ -30,13 +94,16 @@ class InputRouter:
     instead of firing.
     """
 
-    def __init__(self, resolve=None):
-        """Store the optional surface resolver and start with no routing state.
+    def __init__(self, resolve=None, window=None):
+        """Store the optional resolver and window, and start with no routing state.
 
         ``resolve`` maps an event to the surface under the pointer; when it is None the
-        newest registered surface is used, which covers the single-surface case.
+        newest registered surface is used, which covers the single-surface case. ``window``
+        is only used to stand the modal up and to key the per-window registry.
         """
         self._resolve = resolve
+        self._window = window
+        self._running = False
         self._surfaces = []
         self._hot = None
         self._hot_surface = None
@@ -47,23 +114,69 @@ class InputRouter:
         """The registered surfaces, oldest first."""
         return tuple(self._surfaces)
 
+    @property
+    def window(self):
+        """The window this router serves, or None in a background process."""
+        return self._window
+
+    @property
+    def running(self):
+        """Whether a modal is standing up to feed this router."""
+        return self._running
+
     def register(self, surface):
-        """Add a surface to the routing list, oldest first. A repeat is ignored."""
-        if surface not in self._surfaces:
-            self._surfaces.append(surface)
+        """Add a surface to the routing list, oldest first, and start routing.
+
+        A repeat is ignored. The first surface stands the window's modal up; a later
+        surface in the same window shares it, so no second modal is launched.
+        """
+        if surface in self._surfaces:
+            return
+        self._surfaces.append(surface)
+        self.start()
 
     def unregister(self, surface):
-        """Remove a surface and drop any state that pointed at it.
+        """Remove a surface, drop any state that pointed at it, and stop when empty.
 
         A press belongs to one surface, so losing that surface cancels it; a hover is
         cleared through ``_set_hover``, so the node hears the pointer leave.
         """
-        if surface in self._surfaces:
-            self._surfaces.remove(surface)
+        if surface not in self._surfaces:
+            return
+        self._surfaces.remove(surface)
         if self._pressed is not None and self._pressed[0] is surface:
             self._pressed = None
         if self._hot_surface is surface:
             self._set_hover(None, None)
+        if not self._surfaces:
+            self.stop()
+
+    def start(self):
+        """Stand the routing modal up for this window, once per window.
+
+        A window that already has a modal is left alone: re-enabling a surface before the
+        previous modal has seen an event must reuse it, not stack a second one that would
+        handle every event twice.
+        """
+        if self._running:
+            return
+        self._running = True
+        pointer = self._window.as_pointer() if self._window is not None else None
+        if pointer is None:
+            return
+        if pointer in _MODALS:
+            return
+        _MODALS.add(pointer)
+        _launch_modal(self)
+
+    def stop(self):
+        """Mark the router stopped; its modal cancels on the next event.
+
+        Nothing is torn down here beyond the running flag: the modal sees no live router
+        for its window and cancels itself, which is the "self-cancel on context change"
+        rule doing the same work for disable.
+        """
+        self._running = False
 
     def handle(self, event):
         """Process one event and report whether the router consumed it.
@@ -173,3 +286,29 @@ class InputRouter:
         if node is not None:
             node.set_hover(True)
         return True
+
+
+class _RouterModal(bpy.types.Operator):
+    """The modal that feeds a window's router while an interactive surface is enabled.
+
+    It consumes an event the router handled and passes everything else through, so the
+    rest of Blender keeps working. It cancels itself as soon as its window has no live
+    router, which is how a stop and a closed window both take effect.
+    """
+
+    bl_idname = "gui_paint.input_router"
+    bl_label = "gui_paint input router"
+    bl_options = {"INTERNAL"}
+
+    def invoke(self, context, event):
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        router = _active_router(context.window)
+        if router is None or not router.running:
+            _forget_window(context.window)
+            return {"CANCELLED"}
+        if router.handle(event):
+            return {"RUNNING_MODAL"}
+        return {"PASS_THROUGH"}

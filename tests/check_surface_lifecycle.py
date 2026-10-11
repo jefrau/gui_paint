@@ -15,10 +15,21 @@ from gui_paint_modules.surface import Surface
 
 
 class _Context:
-    """Stands in for bpy.context, so the draw callback sees a chosen area."""
+    """Stands in for bpy.context, so the draw callback sees a chosen area and window."""
 
-    def __init__(self, area):
+    def __init__(self, area, window=None):
         self.area = area
+        self.window = window
+
+
+class _Window:
+    """Stands in for a Blender window: an identity for the per-window router registry."""
+
+    def __init__(self, pointer):
+        self._pointer = pointer
+
+    def as_pointer(self):
+        return self._pointer
 
 
 banner()
@@ -88,10 +99,47 @@ try:
     check("enable works again after disable", len(recorder.added) == 2 and surface.owns(other))
     surface.disable()
 
-    interactive = Surface("SpaceView3D", interactive=True)
-    interactive.enable(area)
-    check("an interactive surface starts no router in M1", interactive._router is None)
-    interactive.disable()
+    # -- input: an interactive surface joins the window's router -----------------
+
+    import gui_paint_modules.input.router as router_module
+
+    launches = []
+    saved_launch = router_module._launch_modal
+    router_module._ROUTERS.clear()
+    router_module._MODALS.clear()
+    router_module._launch_modal = lambda router: launches.append(router)
+
+    window = _Window(7777)
+    context.window = window
+    try:
+        interactive = Surface("SpaceView3D", interactive=True)
+        interactive.enable(area)
+        router = interactive._router
+        check("an interactive surface registers with a router", router is not None)
+        check("the first interactive surface starts the router", router.running is True)
+        check("the first surface launches exactly one modal", launches == [router], str(launches))
+
+        second = Surface("SpaceView3D", interactive=True)
+        second.enable(area)
+        check("a second interactive surface shares the router", second._router is router)
+        check("a second interactive surface launches no modal", len(launches) == 1, str(launches))
+
+        interactive.disable()
+        check("disabling one of two leaves the router running", router.running is True)
+        second.disable()
+        check("disabling the last stops the router", router.running is False)
+        check("a stopped router has no surfaces", router.surfaces == ())
+
+        passive = Surface("SpaceView3D")
+        passive.enable(area)
+        check("a non-interactive surface starts no router", passive._router is None)
+        check("a non-interactive surface launches no modal", len(launches) == 1, str(launches))
+        passive.disable()
+    finally:
+        context.window = None
+        router_module._launch_modal = saved_launch
+        router_module._ROUTERS.clear()
+        router_module._MODALS.clear()
 finally:
     bpy.context = original_context
     if original_space is not None:
