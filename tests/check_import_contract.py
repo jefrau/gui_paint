@@ -4,7 +4,8 @@ Covers what the design contract requires (ARCHITECTURE.md, D9): relative imports
 relocatability under a renamed parent package, and no registration at import time.
 
 The public surface grows per milestone: M1 exported `Surface`, M2 the node tree with its
-layout values and the scene, and M3 the widgets and the icon registry.
+layout values and the scene, and M3 the widgets and the icon registry. M4 added the input
+router, which stays internal, so the public surface is unchanged.
 """
 
 import shutil
@@ -26,6 +27,9 @@ MODULES = (
     "coords.py",
     "icons/__init__.py",
     "icons/vector.py",
+    "input/__init__.py",
+    "input/events.py",
+    "input/router.py",
     "layout.py",
     "nodes.py",
     "scene.py",

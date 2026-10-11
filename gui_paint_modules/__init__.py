@@ -5,7 +5,9 @@ import the public surface from its root. Nothing here registers anything at impo
 time, and nothing here depends on anything beyond Blender and numpy.
 
 The public surface grows per milestone: M1 exported ``Surface``, M2 the node tree with
-its layout values and the scene, and M3 the widgets and the icon registry.
+its layout values and the scene, and M3 the widgets and the icon registry. M4 added the
+input router, which stays internal: an interactive surface wires it, so the public surface
+is unchanged.
 """
 
 from .icons import Icon

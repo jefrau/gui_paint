@@ -108,6 +108,9 @@ gui_paint_modules/
     compat.py            Version-gated shims (4.2 vs 4.5+ vs 5.x)
 ```
 
+The `input/` package (router and events) exists as of M4; `widgets/menu.py`,
+`widgets/scroll.py`, `icons/atlas.py`, `spec.py` and `spec_json.py` are still targets.
+
 Design rule: lower layers (**canvas**, **coords**, **shaders**, **layout**) must not
 import higher layers. The dependency direction is always outward-in.
 
@@ -229,8 +232,9 @@ Registration model:
         area.tag_redraw()
 
         if self.interactive:
-            self._router = InputRouter(self)
-            self._router.start()
+            self._router = router_for(bpy.context.window)
+            if self._router is not None:
+                self._router.register(self)
 
     def disable(self):
         """Remove drawing and input. The surface becomes invisible and inert."""
@@ -239,7 +243,7 @@ Registration model:
             space.draw_handler_remove(self._handle, self.region_type)
             self._handle = None
         if self._router is not None:
-            self._router.stop()
+            self._router.unregister(self)
             self._router = None
 
     def owns(self, area):
@@ -253,7 +257,9 @@ type. Scoping by area pointer inside the callback is the cheapest correct approa
 survives area splits, joins and fullscreen toggles.
 
 Parts of the sketch above are targets rather than state: `Scene` arrived with M2 and the
-input router arrives with M4, so today's code holds no router.
+input router with M4, so the sketch now matches the code. An interactive surface registers
+with the router of the window it was enabled in; that router arms the modal on the first
+surface and takes it down on the last one.
 
 ---
 
@@ -519,21 +525,23 @@ Blender-derived one — without special-casing it in code.
 ## Input router
 
 The router turns region-local mouse events into node interactions. It runs **only while
-an interactive surface is enabled**.
+an interactive surface is enabled**. Two decisions are settled here: the modal runs for
+the whole time a surface is enabled, so hover is free, and one router per window is shared
+by every interactive surface in it.
 
 ### Lifecycle
 
 ```
-enable()  ->  router.start()  ->  modal operator running
-                                      |
-                                  every event
-                                      |
-                        hit-test -> on a node?  -- yes --> dispatch, consume
-                                      |
-                                      no
-                                      |
-                                   PASS_THROUGH   -> Blender keeps working
-disable() ->  router.stop()   ->  modal cancelled
+enable()  ->  router.register()  ->  first surface arms the window's modal
+                                         |
+                                     every event
+                                         |
+                           hit-test -> on a node?  -- yes --> dispatch, consume
+                                         |
+                                         no
+                                         |
+                                      PASS_THROUGH   -> Blender keeps working
+disable() ->  router.unregister()  ->  last surface cancels the modal
 ```
 
 ### The key simplification from opt-in
@@ -541,7 +549,8 @@ disable() ->  router.stop()   ->  modal cancelled
 Because the surface is enabled explicitly, the router can run as a modal operator for
 the whole time the surface is live. A running modal receives mouse movement and clicks,
 so the router gets hover and click **without any global keymap hook**. Opt-in removes
-the need for a global mouse listener entirely.
+the need for a global mouse listener entirely. An idle modal receives no events while the
+mouse is still, so its cost is bounded by the input itself.
 
 ### Discipline (non-negotiable)
 
@@ -553,15 +562,19 @@ These rules are what keep an interactive overlay from breaking the host applicat
    pass through.
 3. **Self-cancel on context change.** If the area, window or mode the surface was bound
    to disappears, stop the router cleanly.
-4. **One router per window.** Do not stack routers; the newest enabled surface owns the
-   modal and older ones re-arm when it stops.
+4. **One router per window.** Every interactive surface in a window shares one router and
+   one modal: the first surface to enable arms it and the last to disable takes it down, so
+   a window never runs two modals over the same events. An event goes to the newest surface
+   that owns the pointer's area. `input/events.py` normalizes a raw event to a move, a left
+   press or a left release before the router sees it, so a key, a wheel tick or another
+   button never reaches a node.
 
 ```python
 class InputRouter:
-    """Routes mouse events to scene nodes while a surface is enabled.
+    """Routes mouse events to the interactive nodes of one window's surfaces.
 
-    Runs as a modal operator. Consumes events that hit interactive nodes and
-    passes everything else through to Blender.
+    Runs as a modal while any interactive surface in the window is enabled. Consumes an
+    event that lands on an interactive node and passes everything else through.
     """
 
     def handle(self, event):
@@ -772,14 +785,13 @@ loops are solid. Everything else is easier once those are right.
 
 ## Open questions
 
-- Should the router arm a modal at all times while enabled, or only while a click is in
-  progress (losing hover)? The dock case argues for the former; measure the cost.
-- How should multiple enabled surfaces in the same window arbitrate the modal?
 - Is a stable node id needed for saved layouts and diffing, or are positional paths
   enough?
 - Which external icon sheet format to support first (atlas + JSON index is the simplest).
-- How does a node mutation mark the scene dirty (weak Scene reference with dirty
-  setters, an explicit `mark_dirty`, or always reflow)? Decide at M2 with a test.
+- Is the pointer's area (`bpy.context.area` during a modal) the right way to name the
+  target surface when a window holds several? The resolver falls back to the newest
+  surface when no area matches; the M4 manual step with a split viewport is where the
+  mapping is observed live.
 
 ---
 
