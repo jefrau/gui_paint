@@ -221,4 +221,47 @@ if isinstance(Label, type) and isinstance(Button, type):
           painted.rect == (7.0, 7.0, 7.0, 7.0), repr(painted.rect))
 
 
+# -- a draw pass must not measure: the solve already did ---------------------
+
+
+class _CountingBlf:
+    """Stands in for blf, counting how often a font metric is read."""
+
+    def __init__(self):
+        self.reads = 0
+
+    def size(self, font_id, size):
+        pass
+
+    def dimensions(self, font_id, text):
+        self.reads += 1
+        return (10.0, 5.0)
+
+    def color(self, *args):
+        pass
+
+    def position(self, *args):
+        pass
+
+    def draw(self, *args):
+        pass
+
+
+if isinstance(Button, type):
+    root = Node()
+    root.add(Button(label="Go", icon=Icon.named("select")))
+    root.add(Label("Ready", size=10.0))
+    scene = Scene(root)
+    scene.reflow(BOX, METRICS)
+
+    original = canvas.blf
+    counter = _CountingBlf()
+    canvas.blf = counter
+    try:
+        scene.draw(_RecorderCanvas())
+    finally:
+        canvas.blf = original
+    check("a draw pass reads no font metrics", counter.reads == 0, f"{counter.reads} reads")
+
+
 finish("widgets")

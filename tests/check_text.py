@@ -51,6 +51,7 @@ class _BlfRecorder:
         self.calls.append(("size", font_id, size))
 
     def dimensions(self, font_id, text):
+        self.calls.append(("dimensions", font_id, text))
         return (self.WIDTH, self.HEIGHT)
 
     def color(self, font_id, r, g, b, a):
@@ -93,6 +94,18 @@ if isinstance(Canvas, type) and callable(getattr(Canvas, "text", None)) and call
         drawn.text(4.0, 6.0, "hi", 10.0, (1.0, 0.0, 0.0, 1.0), align="right")
         check("right alignment shifts by the width",
               tuple(recorder.last("position")[2:4]) == (4.0 - 10.0, 6.0), str(recorder.last("position")))
+
+        recorder.calls.clear()
+        drawn.text(4.0, 6.0, "hi", 10.0, (1.0, 0.0, 0.0, 1.0))
+        left_measures = [call for call in recorder.calls if call[0] == "dimensions"]
+        check("left-aligned text does not measure, since the width is unused",
+              left_measures == [], str(left_measures))
+
+        recorder.calls.clear()
+        drawn.text(4.0, 6.0, "hi", 10.0, (1.0, 0.0, 0.0, 1.0), align="center")
+        centered_measures = [call for call in recorder.calls if call[0] == "dimensions"]
+        check("centered text measures exactly once",
+              len(centered_measures) == 1, str(centered_measures))
 
         # Pushing a transform needs a GPU matrix. Under one, the canvas must still hand blf
         # the local point: adding the accumulated offset here would place the label twice.

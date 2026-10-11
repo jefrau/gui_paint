@@ -32,6 +32,9 @@ class Button(Node):
         self.on_click = on_click
         self._hot = False
         self._pressed = False
+        # Solved-state cache: the size measure() read for the label, so a draw pass can
+        # centre the text without reading a font metric of its own.
+        self._label_size = (0.0, 0.0)
 
     @property
     def label(self):
@@ -55,7 +58,8 @@ class Button(Node):
 
     def measure(self, metrics):
         """Return the label plus the icon, with padding, as (width, height) in pixels."""
-        text_width, text_height = measure_text(self.label, _LABEL_SIZE, metrics)
+        self._label_size = measure_text(self.label, _LABEL_SIZE, metrics)
+        text_width, text_height = self._label_size
         padding = coords.logical_to_px(_PADDING, metrics.scale, metrics.base)
         width = text_width
         height = text_height
@@ -73,7 +77,7 @@ class Button(Node):
         canvas.rounded_rect(0.0, 0.0, width, height, radius, _DEFAULT_BACKGROUND)
 
         padding = coords.logical_to_px(_PADDING, metrics.scale, metrics.base)
-        _, text_height = measure_text(self.label, _LABEL_SIZE, metrics)
+        _, text_height = self._label_size
         x = padding
         if self.icon is not None:
             icon = coords.logical_to_px(_ICON_SIZE, metrics.scale, metrics.base)

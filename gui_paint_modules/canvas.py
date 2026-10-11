@@ -230,11 +230,11 @@ class Canvas:
         """
         if align not in (None, "left", "center", "right"):
             raise ValueError(f"align must be None, 'left', 'center' or 'right', got {align!r}")
-        width, _ = measure_text(text, size, self.metrics)
+        # Only alignment needs the width, so unaligned labels cost no font metric read.
         if align == "center":
-            x -= width / 2.0
+            x -= measure_text(text, size, self.metrics)[0] / 2.0
         elif align == "right":
-            x -= width
+            x -= measure_text(text, size, self.metrics)[0]
         blf.size(_FONT_ID, coords.logical_to_px(size, self.metrics.scale, self.metrics.base))
         blf.color(_FONT_ID, color[0], color[1], color[2], color[3])
         blf.position(_FONT_ID, x, y, 0.0)
