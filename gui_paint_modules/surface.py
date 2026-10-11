@@ -41,6 +41,9 @@ class Surface:
         space = getattr(bpy.types, self.space_type)
         self._handle = space.draw_handler_add(
             self._draw, (), self.region_type, "POST_PIXEL")
+        if self.canvas is None:
+            self.canvas = Canvas()
+        self.canvas.prepare()
         self._tag_redraw()
 
     def disable(self):

@@ -47,6 +47,18 @@ class Canvas:
             self._batches[QUAD_BATCH_KEY] = batch
         return batch
 
+    def prepare(self) -> None:
+        """Build the cached GPU resources now, so the first draw does not have to.
+
+        Best effort: a surface can be enabled before a GPU context exists, in which
+        case the first draw builds them instead.
+        """
+        try:
+            self._quad_batch()
+            shaders.uniform_color()
+        except (RuntimeError, SystemError):
+            return
+
     def push_transform(self, x, y, w, h):
         """Place subsequent drawing at (x, y) and size it by (w, h).
 
@@ -62,17 +74,22 @@ class Canvas:
         gpu.matrix.pop()
 
     def push_clip(self, x, y, w, h):
-        """Clip subsequent drawing to a rectangle. Pair with pop_clip()."""
+        """Clip subsequent drawing to a rectangle. Pair with pop_clip().
+
+        `gpu.state.scissor_set` only records the rectangle; the test itself has to be
+        switched on separately, or nothing is clipped.
+        """
         self._clips.append(gpu.state.scissor_get())
         gpu.state.scissor_set(int(x), int(y), int(w), int(h))
+        gpu.state.scissor_test_set(True)
 
     def pop_clip(self):
         """Undo the last push_clip(), restoring the scissor that was in force."""
         previous = self._clips.pop()
-        if previous == (0, 0, 0, 0):
-            gpu.state.scissor_test_set(False)
-        else:
+        if self._clips:
             gpu.state.scissor_set(*previous)
+        else:
+            gpu.state.scissor_test_set(False)
 
     def rect(self, x, y, w, h, color):
         """Fill an axis-aligned rectangle with a solid color."""
