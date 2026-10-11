@@ -64,7 +64,7 @@ to revisit.
 | D5 | **Custom vector icons**, plus an optional external icon sheet loaded as a texture pack. | Icons must be drawable by us as GPU geometry or textures; no dependency on built-in icon APIs. |
 | D6 | **Real layout engine**, not just manual offsets. | Declarative placement (stacks, anchors, padding, fill) instead of hand-computed coordinates per panel. |
 | D7 | **Target: Blender 4.2 LTS and 5.2 LTS (and newer).** | A modern, narrow band keeps the compatibility layer small. |
-| D8 | **One data model, two authoring front-ends** (Python builder + optional JSON loader). | Content is data; behavior is code. See the authoring section. |
+| D8 | **One data model, two ways in**: the Node API in Python (primary) and an optional JSON loader that reads/writes the same model as a `Spec`. | Content is data; behavior is code. JSON is data-only, so behavior is referenced by name and resolved at runtime. See the authoring section. |
 | D9 | **Local copy, not an extension.** The library ships by copying the `gui_paint_modules/` folder into a host addon, and stays relocatable under any parent package. | No manifest, no `bl_info`, no dependencies beyond Blender + numpy; the host drives registration. |
 
 ### Non-goals (out of scope, on purpose)
@@ -86,7 +86,7 @@ gui_paint_modules/
     shaders.py           built-in shader handles, created once per process
     coords.py            coordinate conversions and DPI scaling
     scene.py             Scene: node tree, reflow, z-order, hit-testing
-    layout.py            Layout containers (VBox, HBox, Anchor), size policies
+    layout.py            Layout policies (VBox, HBox) and size/anchor values
     nodes.py             Node base class, Rect/Clip transforms
     widgets/
         __init__.py
@@ -103,7 +103,7 @@ gui_paint_modules/
         __init__.py
         router.py        InputRouter: modal lifecycle, dispatch, PASS_THROUGH rules
         events.py        Normalized event objects for nodes
-    spec.py              The intermediate representation + Python builder
+    spec.py              The serializable representation (Spec dataclasses)
     spec_json.py         Optional JSON loader/saver for the same representation
     compat.py            Version-gated shims (4.2 vs 4.5+ vs 5.x)
 ```
@@ -112,9 +112,15 @@ Design rule: lower layers (**canvas**, **coords**, **shaders**, **layout**) must
 import higher layers. The dependency direction is always outward-in.
 
 Relocatability (see D9): the folder is the copyable unit and must work under any
-parent package. Use relative imports inside it (`from .canvas import ...`); never
-`import gui_paint_modules`. It registers nothing at import time and depends on nothing
-beyond Blender and numpy.
+parent package. This splits into two import contexts:
+
+- **Inside the package**: always relative (`from .canvas import ...`). Never
+  `import gui_paint_modules` from within, so the folder can be renamed or moved.
+- **Host code**: imports the public surface from the package root, under whatever
+  name the copy was placed under (`from .gui_paint_modules import ...`). The root
+  `__init__.py` re-exports the public API; hosts do not reach into submodules.
+
+It registers nothing at import time and depends on nothing beyond Blender and numpy.
 
 ---
 
@@ -292,16 +298,18 @@ to its parent's content box.
 class Node:
     """Base element in the scene tree.
 
-    Nodes carry size policy, margin, anchor and optional layout, and are
-    solved into absolute rectangles by Scene.reflow().
+    Nodes carry size policy, margin, anchor, optional layout and children,
+    and are solved into absolute rectangles by Scene.reflow().
     """
 
-    def __init__(self, size=None, margin=0, anchor=None, z=0):
-        self.children = []
+    def __init__(self, size=None, margin=0, anchor=None, z=0,
+                 layout=None, children=None):
+        self.children = list(children or [])
         self.rect = (0.0, 0.0, 0.0, 0.0)   # computed: (x, y, w, h)
-        self.size = size or Size.auto()
+        self.size = size if size is not None else Size.auto()
         self.margin = margin
         self.anchor = anchor
+        self.layout = layout
         self.z = z
         self.visible = True
         self.clip = False
@@ -309,14 +317,21 @@ class Node:
 
 ### Layout
 
-Layout is declarative and solved in one pass. Containers arrange children; the parent
-gives each child its slot, and children may stretch or take their preferred size.
+Layout is declarative and solved in one pass. The parent arranges its children through
+its **layout policy**; each child may stretch or take its preferred size.
 
-| Container | Behavior |
-|-----------|----------|
+Layout policies and values are **plain data, not nodes**: they are assigned to node
+properties (`layout=`, `anchor=`, `size=`) and carry no children of their own. This
+keeps `layout.py` a pure lower layer (see the design rule above).
+
+| Layout policy | Behavior |
+|---------------|----------|
 | `VBox(gap, padding, align)` | Stacks children top to bottom inside the content box. |
 | `HBox(gap, padding, align)` | Stacks children left to right. |
-| `Anchor(edges)` | Places a child against parent edges or center, ignoring the flow. |
+
+| Placement value | Meaning |
+|-----------------|---------|
+| `Anchor.top_left()`, `Anchor.bottom_left(margin=8)`, `Anchor.center()`, … | Where a node sits inside its parent: a corner, an edge or the center, with an optional margin. A node with an `anchor` leaves the parent's flow. |
 
 | Size policy | Meaning |
 |-------------|---------|
@@ -388,8 +403,9 @@ class Button(Node):
 A dock is just a scene: a panel with a stack of buttons and an anchor for the grip.
 
 ```python
-from gui_paint_modules import Surface, Scene, Panel, Button, Icon
-from gui_paint_modules.layout import VBox, Anchor, Size
+# Host addon code. The folder is copied into the addon package, so the import path
+# is whatever the copy is named under. Inside the package, imports are relative.
+from .gui_paint_modules import Surface, Scene, Panel, Button, Icon, VBox, Anchor
 
 scene = Scene(root=Panel(
     layout=VBox(gap=2, padding=3),
@@ -514,8 +530,10 @@ previous surface. Same router, different lifetime — no second mechanism.
 
 ### The question: config files (JSON) or plain Python?
 
-**Short answer: neither alone. One data model, two front-ends.** The Python builder is
-primary; a JSON loader is optional sugar on top of the same representation.
+**Short answer: neither alone. One data model, two ways in.** Python authors the model
+directly through the Node API (primary); a JSON loader reads the same model as a `Spec`
+(optional). They are two forms of one thing: the runtime Node tree and its serializable
+form.
 
 Reasoning:
 
@@ -536,20 +554,22 @@ Reasoning:
 So the shape is:
 
 ```
-   Python builder  ─┐
-                    ├─►  Spec (plain data tree)  ─►  Scene  ─►  draw / input
-   JSON loader     ─┘
+   Python (Node API) ───────────────────────────►  Scene  ─►  draw / input
+                                                        ▲
+   JSON loader ──►  Spec (plain data tree)  ──►  build ──┘
 ```
 
-The `Spec` is a plain nested structure (dataclasses or dicts). Both front-ends produce
-it; the engine consumes it. Adding a front-end never touches the engine.
+The `Spec` is a plain nested structure (dataclasses or dicts): the **serializable form**
+of the widget tree, whose runtime form is the Node tree. Only the JSON loader produces a
+`Spec`, and a builder turns it into nodes. Either way the engine consumes a Scene, so
+adding an authoring path never touches it.
 
 ```python
 class Spec:
-    """Plain-data description of a widget tree.
+    """Serializable description of a widget tree.
 
-    Produced by the Python builder or the JSON loader and consumed by the
-    scene builder. Behavior is referenced by name and resolved later.
+    Produced by the JSON loader (and by dumping a Node tree) and consumed by
+    the builder. Behavior is referenced by name and resolved later.
     """
 
     def __init__(self, kind, props=None, children=None):
@@ -558,19 +578,19 @@ class Spec:
         self.children = children or []
 ```
 
-Python front-end (primary):
+Python (primary): author Nodes directly. Behavior is a real callable, checked and
+refactorable by the IDE.
 
 ```python
 def toolbar():
-    """Build the spec for a simple vertical toolbar."""
-    # Behavior is a real callable, checked and refactorable by the IDE.
-    return Spec("Panel", {"layout": "vbox", "gap": 2}, [
-        Spec("Button", {"label": "Select", "icon": "select", "action": select_all}),
-        Spec("Button", {"label": "Grab",   "icon": "grab",   "action": grab}),
+    """Build a simple vertical toolbar."""
+    return Panel(layout=VBox(gap=2), children=[
+        Button(label="Select", icon=Icon.named("select"), on_click=select_all),
+        Button(label="Grab",   icon=Icon.named("grab"),   on_click=grab),
     ])
 ```
 
-JSON front-end (optional, for user-editable content):
+JSON loader (optional, for user-editable content):
 
 ```json
 {
@@ -598,9 +618,9 @@ def resolve_action(name):
 
 ### Recommendation
 
-Start with the Python builder only. Add the JSON loader once there is a concrete need
-to save or hand-edit layouts. Building both at once is premature and the Python path
-will shape the Spec anyway.
+Start with the Node API only. Add the JSON loader (and the `Spec` it needs) once there
+is a concrete need to save or hand-edit layouts. Building both at once is premature; the
+Node API will shape the model anyway.
 
 ---
 
@@ -704,6 +724,8 @@ loops are solid. Everything else is easier once those are right.
 - Is a stable node id needed for saved layouts and diffing, or are positional paths
   enough?
 - Which external icon sheet format to support first (atlas + JSON index is the simplest).
+- How does a node mutation mark the scene dirty (weak Scene reference with dirty
+  setters, an explicit `mark_dirty`, or always reflow)? Decide at M2 with a test.
 
 ---
 
@@ -715,6 +737,6 @@ loops are solid. Everything else is easier once those are right.
 | **Space type** | The editor class drawing is registered against (e.g. `SpaceView3D`). |
 | **Logical unit** | Resolution-independent size value; converted to pixels at draw time. |
 | **Reflow** | The one-pass layout solve that assigns absolute rectangles to nodes. |
-| **Spec** | Plain-data widget description shared by the Python and JSON front-ends. |
+| **Spec** | Serializable widget description produced by the JSON loader (and by dumping a Node tree); the data form of the model. |
 | **Passive surface** | Draw-only; never takes input. |
 | **Interactive surface** | Draws and routes input while enabled. |
