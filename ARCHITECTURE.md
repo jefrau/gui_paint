@@ -319,6 +319,10 @@ class Canvas:
 A note on text: `blf` draws in the same canonical space, so labels need no conversion.
 The only care is sizing, which goes through the DPI helper (see Coordinate contract).
 
+Parts of the sketch above are targets rather than state: `rect`, the transform stack and
+the clip stack exist today, while `rounded_rect`, `circle`, `line`, `dashed_line`,
+`text` and `image` arrive with the drawing milestones.
+
 ---
 
 ## Scene graph and layout
