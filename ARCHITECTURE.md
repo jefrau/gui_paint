@@ -252,6 +252,9 @@ Registration model:
 type. Scoping by area pointer inside the callback is the cheapest correct approach and
 survives area splits, joins and fullscreen toggles.
 
+Parts of the sketch above are targets rather than state: `Scene` arrives with M2 and
+the input router with M4, so today's code holds neither.
+
 ---
 
 ## Canvas layer
