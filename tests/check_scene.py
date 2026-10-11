@@ -133,7 +133,7 @@ class _Region:
 
 
 class _System:
-    pixel_size = 72
+    pixel_size = 1.0
     ui_scale = 1.0
 
 

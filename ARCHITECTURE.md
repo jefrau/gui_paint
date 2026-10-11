@@ -164,14 +164,14 @@ def region_rect(region):
     return (0.0, 0.0, float(region.width), float(region.height))
 
 
-def dpi_base_factor():
-    """Return the display's pixels per logical unit.
+def base_factor():
+    """Return the display's extra pixels per logical unit (the HiDPI factor).
 
-    The only place in the package that reads display scaling out of Blender;
-    everything else takes the factor as an argument and stays pure.
+    One of the two readers of display scaling; everything else takes the factor
+    as an argument and stays pure. The DPI ratio itself is `ui_scale`.
     """
-    # Returns a float ratio against Blender's default DPI.
-    return float(bpy.context.preferences.system.pixel_size) / 72.0
+    # pixel_size is already a ratio and defaults to 1.0.
+    return float(bpy.context.preferences.system.pixel_size)
 ```
 
 **Why not top-left / y-down?** Most UI toolkits use it, but it would force a flip on

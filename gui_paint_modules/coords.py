@@ -1,20 +1,17 @@
-"""Coordinate conversions and DPI scaling.
+"""Coordinate conversions and display scaling.
 
 Every conversion between logical units and pixels lives here and nowhere else, per
 the coordinate contract in ARCHITECTURE.md:
 
     px = round(units * ui_scale * base_factor)
 
-``ui_scale`` is the user's UI scale and ``base_factor`` the display's pixels per
-logical unit. Only :func:`current_metrics` and the helper behind it read Blender state;
-the conversions stay pure so they can be checked without a running UI.
+``ui_scale`` is the user's resolution scale (the DPI ratio) and ``base_factor`` the
+extra pixel factor for HiDPI displays, so the interface is drawn at their product.
+Only :func:`current_metrics` and the two readers behind it touch Blender state; the
+conversions stay pure so they can be checked without a running UI.
 """
 
 import bpy
-
-# Blender's default DPI. A logical unit is one pixel at this density, so the factor is
-# a ratio against it rather than a bare number.
-_DEFAULT_DPI = 72.0
 
 
 class DisplayMetrics:
@@ -56,18 +53,28 @@ def region_rect(region) -> tuple:
     return (0.0, 0.0, float(region.width), float(region.height))
 
 
-def dpi_base_factor() -> float:
-    """Return the display's pixels per logical unit.
+def base_factor() -> float:
+    """Return the display's extra pixels per logical unit, for HiDPI screens.
 
-    One of the two readers of display state in the package; :func:`current_metrics`
-    pairs it with the interface scale.
+    Blender keeps two multipliers on the system preferences: ``ui_scale`` (the user's
+    resolution scale, i.e. the DPI ratio) and ``pixel_size`` (the extra pixel factor
+    for a HiDPI display). This is the second one.
+
+    Dividing it by a nominal 72 was wrong: ``pixel_size`` is already a ratio and
+    defaults to 1.0, so the division shrank every layout to a few pixels.
     """
-    return float(bpy.context.preferences.system.pixel_size) / _DEFAULT_DPI
+    return float(bpy.context.preferences.system.pixel_size)
 
 
 def ui_scale() -> float:
-    """Return the user's interface scale, as a ratio against Blender's default."""
-    return float(bpy.context.preferences.system.ui_scale)
+    """Return the user's resolution scale.
+
+    A background process can leave this preference at 0.0 before the interface
+    starts, and a zero scale would collapse every layout, so a non-positive value
+    falls back to 1.0.
+    """
+    scale = float(bpy.context.preferences.system.ui_scale)
+    return scale if scale > 0 else 1.0
 
 
 def current_metrics() -> DisplayMetrics:
@@ -76,4 +83,4 @@ def current_metrics() -> DisplayMetrics:
     The single entry other layers use, so no module outside this one has to know how
     the two scales are read.
     """
-    return DisplayMetrics(ui_scale(), dpi_base_factor())
+    return DisplayMetrics(ui_scale(), base_factor())
