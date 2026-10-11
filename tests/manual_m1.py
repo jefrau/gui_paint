@@ -11,14 +11,16 @@ What to look for:
 2. every two seconds it disappears and comes back, repeatedly;
 3. quitting Blender leaves nothing registered.
 
-Run `stop()` from Blender's Python console to end the toggle early and check that
-the rectangle is gone.
+Run `import manual_m1; manual_m1.stop()` from Blender's Python console to end the
+toggle early and check that the rectangle is gone.
 """
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent))  # repo root, so gui_paint_modules imports
+sys.path.insert(0, str(_HERE))  # tests/, so `import manual_m1` works from the console
 
 import bpy
 
@@ -72,5 +74,6 @@ def stop():
     print("gui_paint M1: stopped, nothing registered")
 
 
-bpy.app.timers.register(_toggle, first_interval=1.0)
-print("gui_paint M1 manual check armed: watch the bottom-left of the 3D viewport.")
+if __name__ == "__main__":
+    bpy.app.timers.register(_toggle, first_interval=1.0)
+    print("gui_paint M1 manual check armed: watch the bottom-left of the 3D viewport.")
