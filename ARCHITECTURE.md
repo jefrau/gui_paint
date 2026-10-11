@@ -252,8 +252,8 @@ Registration model:
 type. Scoping by area pointer inside the callback is the cheapest correct approach and
 survives area splits, joins and fullscreen toggles.
 
-Parts of the sketch above are targets rather than state: `Scene` arrives with M2 and
-the input router with M4, so today's code holds neither.
+Parts of the sketch above are targets rather than state: `Scene` arrived with M2 and the
+input router arrives with M4, so today's code holds no router.
 
 ---
 
@@ -319,9 +319,15 @@ class Canvas:
 A note on text: `blf` draws in the same canonical space, so labels need no conversion.
 The only care is sizing, which goes through the DPI helper (see Coordinate contract).
 
-Parts of the sketch above are targets rather than state: `rect`, the transform stack and
-the clip stack exist today, while `rounded_rect`, `circle`, `line`, `dashed_line`,
-`text` and `image` arrive with the drawing milestones.
+Parts of the sketch above are targets rather than state: `rect`, the transform stack, the
+clip stack, `rounded_rect`, `circle` and `text` exist today, while `line`, `dashed_line`
+and `image` are still to come. Note that a line has no shader to draw it —
+`LINE_UNIFORM_COLOR` does not resolve on 5.2, which `tests/check_draw_api.py` pins — so it
+will be tessellated into triangles when a caller needs it, not drawn by a line shader.
+
+Text is the one primitive sized from logical units at draw time (`blf` has no matrix), so
+the canvas carries the display metrics the scene solved under; the other primitives are
+placed or scaled by solved geometry and take pixels.
 
 ---
 
@@ -492,6 +498,11 @@ class Icon:
         # Returns an Icon instance bound to a vector path or atlas region.
         return _REGISTRY.resolve(name)
 ```
+
+A built-in icon is a list of **convex** polygons in a unit box, so one fan tessellates it
+exactly and a concave glyph is built from convex parts — the `move` cross is two bars.
+A general tessellator (ear clipping, holes) is deliberately not written until a real icon
+needs it.
 
 **Preprocessing beats runtime parsing.** Convert SVG to a compact path list ahead of
 time, or rasterize a sheet to an atlas. Doing this at load time (or as a build step)
@@ -709,9 +720,9 @@ All version-dependent behavior lives in `compat.py`:
 | Area | Note |
 |------|------|
 | GPU initialization | 5.2 needs `gpu.init()` before a background process can build a shader or a batch; 4.2 has no such function. `compat.ensure_gpu_ready()` covers both. |
-| Line and point drawing | Shader variants changed at 4.5; branch in one place. |
+| Line and point drawing | `LINE_UNIFORM_COLOR` does not resolve on 5.2 while `POINT_UNIFORM_COLOR` does (`tests/check_draw_api.py`); a line is tessellated into triangles, so no branch is needed. |
 | Shader names | Already modern across the target range; keep a single lookup. |
-| `blf` sizing | Stable across the target range; keep the DPI helper centralized anyway. |
+| `blf` sizing | Measured stable across the range: `blf.size(fontid, size)` takes two arguments on both targets and `blf.dimensions` answers without a GPU. Keep the DPI helper centralized anyway. |
 | Any 5.x removals | Absorb in `compat.py` so the rest of the code is version-agnostic. |
 
 Rule: no version comparison outside `compat.py`, and prefer a capability check

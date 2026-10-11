@@ -3,8 +3,8 @@
 Covers what the design contract requires (ARCHITECTURE.md, D9): relative imports only,
 relocatability under a renamed parent package, and no registration at import time.
 
-The public surface grows per milestone: M1 exported `Surface`; M2 adds the node tree,
-its layout values and the scene.
+The public surface grows per milestone: M1 exported `Surface`, M2 the node tree with its
+layout values and the scene, and M3 the widgets and the icon registry.
 """
 
 import shutil
@@ -17,17 +17,24 @@ import bpy
 from checkkit import REPO, banner, check, finish
 
 PACKAGE = REPO / "gui_paint_modules"
-PUBLIC = ("Surface", "Scene", "Node", "Size", "Anchor", "VBox", "HBox")
+PUBLIC = ("Surface", "Scene", "Node", "Size", "Anchor", "VBox", "HBox",
+          "Panel", "Label", "Button", "Icon")
 MODULES = (
     "__init__.py",
     "canvas.py",
     "compat.py",
     "coords.py",
+    "icons/__init__.py",
+    "icons/vector.py",
     "layout.py",
     "nodes.py",
     "scene.py",
     "shaders.py",
     "surface.py",
+    "widgets/__init__.py",
+    "widgets/button.py",
+    "widgets/label.py",
+    "widgets/panel.py",
 )
 
 banner()
