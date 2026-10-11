@@ -28,13 +28,17 @@ def check(label: str, condition: bool, detail: str = "") -> None:
 
 
 class _Area:
-    """Stub area: the surface only ever reads as_pointer()."""
+    """Stub area: the surface only reads as_pointer() and asks for redraws."""
 
     def __init__(self, pointer):
         self._pointer = pointer
+        self.redraws = 0
 
     def as_pointer(self):
         return self._pointer
+
+    def tag_redraw(self):
+        self.redraws += 1
 
 
 class _SpaceRecorder:
@@ -68,6 +72,7 @@ try:
 
     surface.enable(area)
     check("enable registers exactly one handler", len(recorder.added) == 1, str(len(recorder.added)))
+    check("enable asks the bound area to redraw", area.redraws == 1, str(area.redraws))
     if recorder.added:
         _, args, region_type, draw_type = recorder.added[0]
         check("handler runs at POST_PIXEL in the chosen region",
@@ -88,6 +93,7 @@ try:
 
     surface.disable()
     check("disable removes the handler", len(recorder.removed) == 1, str(len(recorder.removed)))
+    check("disable asks the area to redraw too", area.redraws == 2, str(area.redraws))
     check("disable leaves no handle", surface._handle is None)
     check("disable forgets the area", not surface.owns(area))
 
