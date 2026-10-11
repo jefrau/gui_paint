@@ -37,6 +37,63 @@ def skip(reason: str) -> None:
     skips.append(reason)
 
 
+class RecorderCanvas:
+    """Canvas stand-in that records the draw primitives it is handed.
+
+    A check that watches a widget or a scene draw uses this instead of a real Canvas, so
+    the check needs no GPU and runs on both targets. It carries a default metrics object
+    with the two numbers a draw reads; a solved scene replaces it with the real one. The
+    library is deliberately not imported here, so this module stays pure plumbing.
+    """
+
+    class _DefaultMetrics:
+        scale = 1.0
+        base = 1.0
+
+    def __init__(self):
+        self.calls = []
+        self.metrics = self._DefaultMetrics()
+
+    def prepare(self):
+        """No-op: Surface.enable warms a real canvas, and there is nothing to warm here."""
+
+    def __getattr__(self, name):
+        """Record any other primitive as (name, *args) instead of drawing it."""
+        def record(*args, **kwargs):
+            self.calls.append((name,) + args)
+            return None
+        return record
+
+
+class StubArea:
+    """Stand-in for a Blender area: identity and repaint requests, nothing else."""
+
+    def __init__(self, pointer):
+        self._pointer = pointer
+        self.redraws = 0
+
+    def as_pointer(self):
+        return self._pointer
+
+    def tag_redraw(self):
+        self.redraws += 1
+
+
+class StubSpace:
+    """Stand-in for a Blender space type, recording handler add and remove calls."""
+
+    def __init__(self):
+        self.added = []
+        self.removed = []
+
+    def draw_handler_add(self, callback, args, region_type, draw_type):
+        self.added.append((callback, args, region_type, draw_type))
+        return ("handle", len(self.added))
+
+    def draw_handler_remove(self, handle, region_type):
+        self.removed.append((handle, region_type))
+
+
 def raises_value_error(call) -> bool:
     """Whether a zero-argument call raises ValueError, and nothing else.
 

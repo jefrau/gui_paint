@@ -6,7 +6,7 @@ canvas that stands in for `Canvas`, and a Label's intrinsic size goes through
 is why nothing here needs a GPU gate.
 """
 
-from checkkit import banner, check, finish
+from checkkit import RecorderCanvas, banner, check, finish
 
 from gui_paint_modules import canvas, coords
 from gui_paint_modules.icons import Icon
@@ -23,32 +23,16 @@ measure_text = getattr(canvas, "measure_text", None)
 check("canvas.measure_text is available", callable(measure_text))
 
 
-class _RecorderCanvas:
-    """Canvas stand-in: records the draw primitives a widget emits."""
-
-    def __init__(self):
-        self.calls = []
-        self.metrics = coords.DisplayMetrics(1.0, 1.0)
-
-    def rounded_rect(self, x, y, w, h, radius, color):
-        self.calls.append(("rounded_rect", x, y, w, h, radius, color))
-
-    def shape(self, key, triangles, x, y, w, h, color):
-        self.calls.append(("shape", key, x, y, w, h, color))
-
-    def text(self, x, y, text, size, color, align=None):
-        self.calls.append(("text", x, y, text, size, color))
-
-    def push_transform(self, x, y, w, h):
-        pass
-
-    def pop_transform(self):
-        pass
+_TRANSFORMS = ("push_transform", "pop_transform")
 
 
 def _names(recorder) -> list:
-    """The draw primitives a recorder saw, in the order they arrived."""
-    return [call[0] for call in recorder.calls]
+    """The draw primitives a recorder saw, in order, ignoring the transform bookkeeping.
+
+    The scene pushes a transform per node, so the recorder sees those too; the widget
+    order this check cares about is the primitives the widget itself emits.
+    """
+    return [call[0] for call in recorder.calls if call[0] not in _TRANSFORMS]
 
 
 # -- the measurement seam on Node -------------------------------------------
@@ -96,7 +80,7 @@ if isinstance(Label, type) and callable(measure) and callable(measure_text):
     check("a Label's auto slot comes from its measure",
           tuple(auto.rect[2:]) == expected, f"{auto.rect} vs {expected}")
 
-    recorder = _RecorderCanvas()
+    recorder = RecorderCanvas()
     scene.draw(recorder)
     drawn = [call for call in recorder.calls if call[0] == "text"]
     check("a Label draws its text", len(drawn) == 1 and drawn[0][3] == "Ab", str(drawn))
@@ -120,7 +104,7 @@ if isinstance(Button, type) and callable(measure) and callable(measure_text):
     check("a Button's auto slot comes from its measure",
           tuple(button.rect[2:]) == tuple(button.measure(METRICS)), str(button.rect))
 
-    recorder = _RecorderCanvas()
+    recorder = RecorderCanvas()
     scene.draw(recorder)
     check("a Button draws background, then icon, then label",
           _names(recorder) == ["rounded_rect", "shape", "text"], str(_names(recorder)))
@@ -134,7 +118,7 @@ if isinstance(Button, type) and callable(measure) and callable(measure_text):
     interactive = Button(label="Go", on_click=lambda: called.append(True))
     scene = Scene(interactive)
     scene.reflow(BOX, METRICS)
-    scene.draw(_RecorderCanvas())
+    scene.draw(RecorderCanvas())
     scene.hit_test(10.0, 10.0)
     check("a Button never invokes on_click", called == [], str(called))
     check("a Button starts cold and unpressed",
@@ -163,7 +147,7 @@ if isinstance(Panel, type) and callable(measure):
           second.rect[1] + second.rect[3] <= panel.rect[3],
           f"{second.rect} in {panel.rect}")
 
-    recorder = _RecorderCanvas()
+    recorder = RecorderCanvas()
     scene.draw(recorder)
     rounds = [call for call in recorder.calls if call[0] == "rounded_rect"]
     check("a Panel draws its rounded background",
@@ -258,7 +242,7 @@ if isinstance(Button, type):
     counter = _CountingBlf()
     canvas.blf = counter
     try:
-        scene.draw(_RecorderCanvas())
+        scene.draw(RecorderCanvas())
     finally:
         canvas.blf = original
     check("a draw pass reads no font metrics", counter.reads == 0, f"{counter.reads} reads")

@@ -8,24 +8,10 @@ finishes.
 
 import bpy
 
-from checkkit import banner, check, finish
+from checkkit import StubArea, StubSpace, banner, check, finish
 
 from gui_paint_modules.canvas import Canvas
 from gui_paint_modules.surface import Surface
-
-
-class _Area:
-    """Stub area: the surface only reads as_pointer() and asks for redraws."""
-
-    def __init__(self, pointer):
-        self._pointer = pointer
-        self.redraws = 0
-
-    def as_pointer(self):
-        return self._pointer
-
-    def tag_redraw(self):
-        self.redraws += 1
 
 
 class _Context:
@@ -35,36 +21,21 @@ class _Context:
         self.area = area
 
 
-class _SpaceRecorder:
-    """Stand-in for a Blender space type, recording handler add/remove calls."""
-
-    def __init__(self):
-        self.added = []
-        self.removed = []
-
-    def draw_handler_add(self, callback, args, region_type, draw_type):
-        self.added.append((callback, args, region_type, draw_type))
-        return ("handle", len(self.added))
-
-    def draw_handler_remove(self, handle, region_type):
-        self.removed.append((handle, region_type))
-
-
 banner()
 
 check("Surface is defined", isinstance(Surface, type))
 for method in ("enable", "disable", "owns"):
     check(f"Surface.{method} is defined", callable(getattr(Surface, method, None)))
 
-recorder = _SpaceRecorder()
+recorder = StubSpace()
 original_space = getattr(bpy.types, "SpaceView3D", None)
 original_context = bpy.context
 context = _Context(None)
 bpy.types.SpaceView3D = recorder
 bpy.context = context
 try:
-    area = _Area(4242)
-    other = _Area(777)
+    area = StubArea(4242)
+    other = StubArea(777)
 
     surface = Surface("SpaceView3D")
     check("a fresh surface holds no handle", surface._handle is None)

@@ -8,7 +8,7 @@ hands the surface a recorder canvas so its draw path stays headless too.
 
 import bpy
 
-from checkkit import banner, check, finish
+from checkkit import RecorderCanvas, StubArea, StubSpace, banner, check, finish
 
 from gui_paint_modules import coords
 from gui_paint_modules.layout import Size, VBox
@@ -34,28 +34,6 @@ if pkg is not None:
     check("the public surface is re-exported", not missing, f"missing {missing}")
 
 
-class _RecorderCanvas:
-    """Canvas stand-in: records the transform and clip calls, draws nothing."""
-
-    def __init__(self):
-        self.calls = []
-
-    def prepare(self):
-        """No-op: Surface.enable warms the canvas, and there is nothing to warm here."""
-
-    def push_transform(self, x, y, w, h):
-        self.calls.append(("push_transform", x, y, w, h))
-
-    def pop_transform(self):
-        self.calls.append(("pop_transform",))
-
-    def push_clip(self, x, y, w, h):
-        self.calls.append(("push_clip", x, y, w, h))
-
-    def pop_clip(self):
-        self.calls.append(("pop_clip",))
-
-
 def _painter(name, sink, **kw):
     """A node whose draw records its name into `sink`, so the walk order shows."""
     node = Node(**kw)
@@ -75,7 +53,7 @@ if callable(getattr(Scene, "draw", None)) and callable(getattr(Node, "draw", Non
     holder.add(b)
     scene = Scene(holder)
     scene.reflow(BOX, METRICS)
-    scene.draw(_RecorderCanvas())
+    scene.draw(RecorderCanvas())
     check("the walk draws the container first, then back-to-front by z",
           sink == ["holder", "a", "b"], str(sink))
 
@@ -83,13 +61,13 @@ if callable(getattr(Scene, "draw", None)) and callable(getattr(Node, "draw", Non
     a.z = 0
     b.z = 0
     scene.reflow(BOX, METRICS)
-    scene.draw(_RecorderCanvas())
+    scene.draw(RecorderCanvas())
     check("equal z keeps the later sibling on top", sink == ["holder", "a", "b"], str(sink))
 
     sink.clear()
     b.visible = False
     scene.reflow(BOX, METRICS)
-    scene.draw(_RecorderCanvas())
+    scene.draw(RecorderCanvas())
     check("an invisible node is not drawn", sink == ["holder", "a"], str(sink))
     b.visible = True
 
@@ -101,7 +79,7 @@ if callable(getattr(Scene, "draw", None)) and callable(getattr(Node, "draw", Non
     root.add(site)
     scene = Scene(root)
     scene.reflow(BOX, METRICS)
-    canvas = _RecorderCanvas()
+    canvas = RecorderCanvas()
     scene.draw(canvas)
     pushed = [call for call in canvas.calls if call[0] == "push_clip"]
     popped = [call for call in canvas.calls if call[0] == "pop_clip"]
@@ -117,7 +95,7 @@ if callable(getattr(Scene, "draw", None)) and callable(getattr(Node, "draw", Non
     holder.add(_painter("kid", sink, size=Size.fixed(10)))
     scene = Scene(holder)
     scene.reflow(BOX, METRICS)
-    canvas = _RecorderCanvas()
+    canvas = RecorderCanvas()
     scene.draw(canvas)
     check("a padded container pushes its content inset",
           ("push_transform", 7, 7, 1.0, 1.0) in canvas.calls, str(canvas.calls))
@@ -125,18 +103,6 @@ if callable(getattr(Scene, "draw", None)) and callable(getattr(Node, "draw", Non
 
 
 # -- Surface wiring ---------------------------------------------------------
-
-
-class _Area:
-    def __init__(self, pointer):
-        self._pointer = pointer
-        self.redraws = 0
-
-    def as_pointer(self):
-        return self._pointer
-
-    def tag_redraw(self):
-        self.redraws += 1
 
 
 class _Region:
@@ -160,24 +126,11 @@ class _Context:
         self.preferences = _Preferences()
 
 
-class _SpaceRecorder:
-    def __init__(self):
-        self.added = []
-        self.removed = []
-
-    def draw_handler_add(self, callback, args, region_type, draw_type):
-        self.added.append((callback, args, region_type, draw_type))
-        return ("handle", len(self.added))
-
-    def draw_handler_remove(self, handle, region_type):
-        self.removed.append((handle, region_type))
-
-
 if pkg is not None and callable(getattr(Scene, "draw", None)):
     original_space = getattr(bpy.types, "SpaceView3D", None)
     original_context = bpy.context
-    area = _Area(4242)
-    bpy.types.SpaceView3D = _SpaceRecorder()
+    area = StubArea(4242)
+    bpy.types.SpaceView3D = StubSpace()
     bpy.context = _Context(area, _Region())
     try:
         surface = pkg.Surface("SpaceView3D")
@@ -185,7 +138,7 @@ if pkg is not None and callable(getattr(Scene, "draw", None)):
         drawn = []
         surface.scene = Scene(Node(size=Size.fixed(10)))
         surface.scene.root.draw = lambda canvas: drawn.append("node")
-        surface.canvas = _RecorderCanvas()  # keep the draw path off the GPU
+        surface.canvas = RecorderCanvas()  # keep the draw path off the GPU
         surface.draw = lambda canvas: drawn.append("callback")
         surface.enable(area)
         surface._draw()

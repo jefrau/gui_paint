@@ -5,7 +5,7 @@ a recorder canvas that stands in for `Canvas.shape`, which keeps the whole check
 GPU while still pinning the key, the box and the colour a draw passes down.
 """
 
-from checkkit import banner, check, finish
+from checkkit import RecorderCanvas, banner, check, finish, raises_value_error
 
 banner()
 
@@ -21,26 +21,6 @@ Icon = getattr(icons, "Icon", None) if icons is not None else None
 check("Icon is defined", isinstance(Icon, type))
 
 BUILTIN = ("select", "grab", "move")
-
-
-class _RecorderCanvas:
-    """Stands in for Canvas, recording the shape call an icon makes."""
-
-    def __init__(self):
-        self.calls = []
-
-    def shape(self, key, triangles, x, y, w, h, color):
-        self.calls.append((key, triangles, x, y, w, h, color))
-
-
-def _raises_value_error(call) -> bool:
-    try:
-        call()
-    except ValueError:
-        return True
-    except Exception:
-        return False
-    return False
 
 
 if isinstance(Icon, type):
@@ -60,14 +40,15 @@ if isinstance(Icon, type):
     check("move is two convex bars", len(Icon.named("move").triangles) == 3 * 8,
           str(len(Icon.named("move").triangles)))
 
-    check("an unknown name raises", _raises_value_error(lambda: Icon.named("nope")))
+    check("an unknown name raises", raises_value_error(lambda: Icon.named("nope")))
 
     icon = Icon.named("select")
-    recorder = _RecorderCanvas()
+    recorder = RecorderCanvas()
     icon.draw(recorder, 3.0, 4.0, 12.0, 12.0, (1.0, 1.0, 1.0, 1.0))
     check("draw calls the canvas once", len(recorder.calls) == 1, str(len(recorder.calls)))
     if recorder.calls:
-        key, triangles, x, y, w, h, color = recorder.calls[0]
+        name, key, triangles, x, y, w, h, color = recorder.calls[0]
+        check("the shape primitive is the one used", name == "shape", name)
         check("the shape is keyed by the icon name", key == ("icon", "select"), repr(key))
         check("the box is passed through", (x, y, w, h) == (3.0, 4.0, 12.0, 12.0),
               repr((x, y, w, h)))
