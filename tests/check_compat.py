@@ -1,39 +1,26 @@
-"""Verify the version/capability shims and the per-process shader handle cache.
+"""Verify the version/capability shims and the shader handle cache.
 
 Two invariants are checked:
 
-- `compat` is the only package module that reacts to the running Blender version;
-- the shader cache hands back one handle per kind, and never builds a second one.
+- no package module outside `compat.py` reads the running Blender version;
+- the shader cache hands back the same handle instead of building a second one.
 
-The cache smoke test can only run where a background process reaches the GPU. The
-probe in `check_gpu.py` shows 4.2 refuses every GPU call headless while 5.2 works
-after `gpu.init()`, so 4.2 records a skip here instead of a failure.
+The cache smoke test can only run where a background process reaches the GPU, so 4.2
+records a skip there instead of a failure.
 """
 
-import sys
-from pathlib import Path
-
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO))
-
-import bpy
+from checkkit import REPO, banner, check, finish, skip
 
 from gui_paint_modules import compat, shaders
 
-failures = []
-skips = []
+VERSION_MARKERS = (
+    "bpy.app.version",
+    "bpy.app.version_string",
+    "bpy.app.version_cycle",
+    "bpy.app.version_file",
+)
 
-
-def check(label: str, condition: bool, detail: str = "") -> None:
-    """Record one contract assertion and print its outcome."""
-    if condition:
-        print(f"  ok   {label}")
-        return
-    failures.append(label)
-    print(f"  FAIL {label}{': ' + detail if detail else ''}")
-
-
-print(f"  -- {bpy.app.version_string}")
+banner()
 
 ensure_ready = getattr(compat, "ensure_gpu_ready", None)
 check("compat.ensure_gpu_ready is defined", callable(ensure_ready))
@@ -50,9 +37,11 @@ offenders = []
 for path in sorted((REPO / "gui_paint_modules").rglob("*.py")):
     if path.name == "compat.py":
         continue
-    if "bpy.app.version" in path.read_text(encoding="utf-8"):
-        offenders.append(path.name)
-check("version branching stays in compat.py", not offenders, str(offenders))
+    text = path.read_text(encoding="utf-8")
+    found = [marker for marker in VERSION_MARKERS if marker in text]
+    if found:
+        offenders.append(f"{path.name}:{found}")
+check("no module outside compat.py reads the Blender version", not offenders, str(offenders))
 
 uniform_color = getattr(shaders, "uniform_color", None)
 check("shaders.uniform_color is defined", callable(uniform_color))
@@ -66,7 +55,7 @@ if callable(uniform_color):
         if hasattr(gpu, "init"):
             check("shader cache builds a handle", False, f"{type(exc).__name__}: {exc}")
         else:
-            skips.append(f"shader cache unreachable in this background build ({type(exc).__name__})")
+            skip(f"shader cache unreachable in this background build ({type(exc).__name__})")
     else:
         check("shader cache returns one handle", first is second)
         check(
@@ -75,9 +64,4 @@ if callable(uniform_color):
             type(first).__name__,
         )
 
-if skips:
-    print("  skip " + "; ".join(skips))
-
-if failures:
-    raise SystemExit(f"compat: {len(failures)} check(s) failed: {failures}")
-print("compat: all checks passed")
+finish("compat")

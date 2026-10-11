@@ -5,26 +5,11 @@ Background mode has no real area, so the check injects a stub area and swaps
 `tests/check_import_contract.py` uses to observe registration.
 """
 
-import sys
-from pathlib import Path
-
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO))
-
 import bpy
 
+from checkkit import banner, check, finish
+
 from gui_paint_modules.surface import Surface
-
-failures = []
-
-
-def check(label: str, condition: bool, detail: str = "") -> None:
-    """Record one contract assertion and print its outcome."""
-    if condition:
-        print(f"  ok   {label}")
-        return
-    failures.append(label)
-    print(f"  FAIL {label}{': ' + detail if detail else ''}")
 
 
 class _Area:
@@ -55,6 +40,8 @@ class _SpaceRecorder:
     def draw_handler_remove(self, handle, region_type):
         self.removed.append((handle, region_type))
 
+
+banner()
 
 check("Surface is defined", isinstance(Surface, type))
 for method in ("enable", "disable", "owns"):
@@ -112,6 +99,4 @@ finally:
     if original is not None:
         bpy.types.SpaceView3D = original
 
-if failures:
-    raise SystemExit(f"surface: {len(failures)} check(s) failed: {failures}")
-print("surface: all checks passed")
+finish("surface")

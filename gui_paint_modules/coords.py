@@ -12,6 +12,10 @@ pure so they can be checked without a running UI.
 
 import bpy
 
+# Blender's default DPI. A logical unit is one pixel at this density, so the factor is
+# a ratio against it rather than a bare number.
+_DEFAULT_DPI = 72.0
+
 
 def logical_to_px(value: float, ui_scale: float, base_factor: float) -> int:
     """Convert a logical unit value to pixels.
@@ -23,7 +27,7 @@ def logical_to_px(value: float, ui_scale: float, base_factor: float) -> int:
 
 
 def region_rect(region) -> tuple:
-    """Return the region rectangle in the canonical space.
+    """Return the region rectangle as (x, y, width, height), in pixels.
 
     The canonical space puts the origin at the region's bottom-left corner, so the
     rectangle always starts at (0, 0).
@@ -34,7 +38,6 @@ def region_rect(region) -> tuple:
 def dpi_base_factor() -> float:
     """Return the display's pixels per logical unit.
 
-    A logical unit is one pixel at the default 72 DPI. This is the only place in
-    the package that reads display scaling out of Blender.
+    This is the only place in the package that reads display scaling out of Blender.
     """
-    return float(bpy.context.preferences.system.pixel_size) / 72.0
+    return float(bpy.context.preferences.system.pixel_size) / _DEFAULT_DPI

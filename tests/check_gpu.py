@@ -1,18 +1,20 @@
-"""Probe what the GPU API allows in background mode.
+"""Probe what the GPU API allows in background mode, and pin the finding.
 
-M1 needs to know whether any drawing code can run headless before the Canvas
-layer is designed. This check records capabilities; it fails only if the probe
-itself cannot run.
+The M1 design rests on one measured difference: 5.2 exposes `gpu.init` and can build
+shaders and batches from a background process, while 4.2 exposes no `gpu.init` and
+refuses every GPU call.
 
-Reading the report: a failure may mean the API is unavailable, or only that the
-call shape used here is wrong for this version. Treat the import, init and
-shader entries as the load-bearing ones.
+Where `gpu.init` exists the check asserts that the drawing path really works, so a
+regression fails the suite. Where it does not, the limitation is recorded as a skip
+instead of being printed as a pass.
 """
 
 import json
 import sys
 
 import bpy
+
+from checkkit import banner, check, finish, skip
 
 report = {"blender": bpy.app.version_string, "python": sys.version.split()[0]}
 
@@ -26,26 +28,39 @@ def record(key, fn):
 
 
 def make_batch():
-    """Build a minimal triangle batch, near the shape Canvas.rect will need."""
+    """Build the six-vertex triangle list Canvas.rect draws."""
     fmt = gpu.types.GPUVertFormat()
     fmt.attr_add(id="pos", comp_type="F32", len=2, fetch_mode="FLOAT")
-    buf = gpu.types.GPUVertBuf(len=3, format=fmt)
-    buf.attr_fill(id="pos", data=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)])
+    buf = gpu.types.GPUVertBuf(len=6, format=fmt)
+    buf.attr_fill(id="pos", data=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)] * 2)
     gpu.types.GPUBatch(type="TRIS", buf=buf)
     return "ok"
 
 
+banner()
+
 try:
     import gpu
 except Exception as exc:
-    report["import_gpu"] = f"{type(exc).__name__}: {exc}"
+    check("gpu imports", False, f"{type(exc).__name__}: {exc}")
 else:
-    report["import_gpu"] = "ok"
-    report["has_init"] = hasattr(gpu, "init")
-    if report["has_init"]:
-        record("init", lambda: gpu.init() or "ok")
-    for name in ("UNIFORM_COLOR", "POINT_UNIFORM_COLOR", "SMOOTH_COLOR"):
-        record(f"shader.{name}", lambda n=name: type(gpu.shader.from_builtin(n)).__name__)
-    record("batch", make_batch)
+    check("gpu imports", True)
+    if hasattr(gpu, "init"):
+        gpu.init()
+        record("shader.UNIFORM_COLOR", lambda: type(gpu.shader.from_builtin("UNIFORM_COLOR")).__name__)
+        record("batch", make_batch)
+        check(
+            "the draw path builds a uniform-colour shader",
+            report.get("shader.UNIFORM_COLOR") == "GPUShader",
+            str(report.get("shader.UNIFORM_COLOR")),
+        )
+        check(
+            "the draw path builds a vertex batch",
+            report.get("batch") == "ok",
+            str(report.get("batch")),
+        )
+    else:
+        skip("this build exposes no gpu.init, so the GPU is unreachable in background")
 
 print("GPU_PROBE " + json.dumps(report, sort_keys=True))
+finish("gpu")

@@ -1,35 +1,23 @@
 """Verify the coordinate contract implemented in `gui_paint_modules/coords.py`.
 
-Two things are checked:
+Three things are checked:
 
 - the single conversion point matches `px = round(units * ui_scale * base_factor)`,
   including the rounding edges and non-unit scales;
-- the region rectangle is expressed in the canonical space (origin at the region's
-  bottom-left corner).
+- the region rectangle is expressed in the canonical space;
+- no other module so much as mentions the UI scale.
 
-The DPI reader needs a running UI, so it is only checked for existence here; the
-draw path exercises it in task M1.4.
+That last one is a text heuristic, not a behaviour proof: it catches a module that
+starts scaling, and a parameter rename would slip past it.
+
+The DPI reader needs a running UI, so it is only checked for existence here.
 """
 
-import sys
-from pathlib import Path
-
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO))
+from checkkit import REPO, banner, check, finish
 
 from gui_paint_modules import coords
 
-failures = []
-
-
-def check(label: str, condition: bool, detail: str = "") -> None:
-    """Record one contract assertion and print its outcome."""
-    if condition:
-        print(f"  ok   {label}")
-        return
-    failures.append(label)
-    print(f"  FAIL {label}{': ' + detail if detail else ''}")
-
+banner()
 
 convert = getattr(coords, "logical_to_px", None)
 check("logical_to_px is defined", callable(convert))
@@ -94,8 +82,6 @@ for path in sorted((REPO / "gui_paint_modules").glob("*.py")):
         continue
     if "ui_scale" in path.read_text(encoding="utf-8"):
         offenders.append(path.name)
-check("no other module scales by ui_scale", not offenders, str(offenders))
+check("no other module mentions the UI scale", not offenders, str(offenders))
 
-if failures:
-    raise SystemExit(f"coords: {len(failures)} check(s) failed: {failures}")
-print("coords: all checks passed")
+finish("coords")

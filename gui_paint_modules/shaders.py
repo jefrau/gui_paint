@@ -1,26 +1,23 @@
 """Built-in shader handles, created once per process and reused.
 
-Creating a shader inside a draw call is never allowed, so each handle is built on
+Creating a shader inside a draw call is never allowed, so the handle is built on
 first use and kept for the life of the process.
+
+Only one kind is needed so far, which is why the cache is a single slot rather than a
+table keyed by kind; the second kind is what should turn it into a table.
 """
 
 import gpu
 
 from . import compat
 
-_handles = {}
-
-
-def _cached(kind: str):
-    """Return the process-wide handle for a built-in shader kind, building it once."""
-    handle = _handles.get(kind)
-    if handle is None:
-        compat.ensure_gpu_ready()
-        handle = gpu.shader.from_builtin(kind)
-        _handles[kind] = handle
-    return handle
+_uniform_color = None
 
 
 def uniform_color():
     """Return the handle that fills flat-coloured shapes."""
-    return _cached("UNIFORM_COLOR")
+    global _uniform_color
+    if _uniform_color is None:
+        compat.ensure_gpu_ready()
+        _uniform_color = gpu.shader.from_builtin("UNIFORM_COLOR")
+    return _uniform_color

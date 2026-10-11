@@ -1,8 +1,7 @@
 """Verify the gui_paint package import contract.
 
-Covers what the design contract requires (ARCHITECTURE.md, D9): relative imports
-only, relocatability under a renamed parent package, and no registration at
-import time.
+Covers what the design contract requires (ARCHITECTURE.md, D9): relative imports only,
+relocatability under a renamed parent package, and no registration at import time.
 
 The public surface grows per milestone; M1 exports `Surface` only.
 """
@@ -14,21 +13,12 @@ from pathlib import Path
 
 import bpy
 
-REPO = Path(__file__).resolve().parent.parent
+from checkkit import REPO, banner, check, finish
+
 PACKAGE = REPO / "gui_paint_modules"
 PUBLIC = ("Surface",)
 
-failures = []
-
-
-def check(label: str, condition: bool, detail: str = "") -> None:
-    """Record one contract assertion and print its outcome."""
-    if condition:
-        print(f"  ok   {label}")
-        return
-    failures.append(label)
-    print(f"  FAIL {label}{': ' + detail if detail else ''}")
-
+banner()
 
 check("package directory exists", PACKAGE.is_dir(), str(PACKAGE))
 
@@ -85,6 +75,4 @@ with tempfile.TemporaryDirectory() as tmp:
         check("public surface re-exported", not missing, f"missing {missing}")
     check("nothing registered at import", not registered, str(registered))
 
-if failures:
-    raise SystemExit(f"import contract: {len(failures)} check(s) failed: {failures}")
-print("import contract: all checks passed")
+finish("import contract")
