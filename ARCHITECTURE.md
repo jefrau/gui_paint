@@ -162,6 +162,16 @@ def region_rect(region):
     """
     # Returns (x, y, width, height) in region-local pixels.
     return (0.0, 0.0, float(region.width), float(region.height))
+
+
+def dpi_base_factor():
+    """Return the display's pixels per logical unit.
+
+    The only place in the package that reads display scaling out of Blender;
+    everything else takes the factor as an argument and stays pure.
+    """
+    # Returns a float ratio against Blender's default DPI.
+    return float(bpy.context.preferences.system.pixel_size) / 72.0
 ```
 
 **Why not top-left / y-down?** Most UI toolkits use it, but it would force a flip on
@@ -200,6 +210,10 @@ Registration model:
   scoped without per-area bookkeeping.
 - Interactive surfaces also start the input router (see below).
 - `disable()` removes the draw callback and stops the router. Nothing remains.
+- Both `enable()` and `disable()` ask the bound area to repaint with
+  `area.tag_redraw()`. A draw handler only runs when Blender repaints the region, so
+  without that request an enabled overlay can stay invisible until an unrelated redraw
+  happens. Note that `Space` has no `tag_redraw`; `Area` and `Region` do.
 
 ```python
     def enable(self, area):
@@ -208,9 +222,11 @@ Registration model:
             return
 
         space = getattr(bpy.types, self.space_type)
+        self._area = area
         self._area_ptr = area.as_pointer()
         self._handle = space.draw_handler_add(
-            self._draw, (self._area_ptr,), self.region_type, "POST_PIXEL")
+            self._draw, (), self.region_type, "POST_PIXEL")
+        area.tag_redraw()
 
         if self.interactive:
             self._router = InputRouter(self)
@@ -225,6 +241,11 @@ Registration model:
         if self._router is not None:
             self._router.stop()
             self._router = None
+
+    def owns(self, area):
+        """Whether this surface draws in the given area."""
+        # Compare the pointer, so a closed area cannot make this raise.
+        return area is not None and area.as_pointer() == self._area_ptr
 ```
 
 **Why per space type and not per area?** Blender's draw handler API is keyed by space
@@ -244,7 +265,10 @@ Principles:
   inside a draw call.
 - **Batches are cached** by geometry signature. Static geometry (rounded rects, icon
   paths) is built once and replayed.
-- **Transform stack** mirrors `gpu.matrix.push_pop` so nodes can draw in local space.
+- **A solid rectangle reuses one cached unit quad** under a transform, so its geometry
+  is built once per canvas instead of once per rectangle. The vertices come from
+  `quad_triangles()` and the batch is cached under `QUAD_BATCH_KEY`.
+- **Transform stack** wraps `gpu.matrix.push`/`pop` so nodes can draw in local space.
 - **Clip stack** uses the scissor test so children can be clipped to a parent's box.
 
 ```python
@@ -276,11 +300,17 @@ class Canvas:
     def image(self, texture, x, y, w, h, uv=None):
         """Draw a texture (used for atlas icons and user images)."""
 
-    def push_transform(self, dx, dy):
-        """Offset the current drawing space; pair with pop_transform()."""
+    def push_transform(self, x, y, w, h):
+        """Place and size subsequent drawing at (x, y) with (w, h)."""
+
+    def pop_transform(self):
+        """Undo the last push_transform()."""
 
     def push_clip(self, x, y, w, h):
-        """Clip subsequent drawing to a rectangle; pair with pop_clip()."""
+        """Clip subsequent drawing to a rectangle."""
+
+    def pop_clip(self):
+        """Undo the last push_clip(), restoring the scissor that was in force."""
 ```
 
 A note on text: `blf` draws in the same canonical space, so labels need no conversion.
@@ -667,17 +697,19 @@ Two cautions:
 
 Target versions: **4.2 LTS and 5.2 LTS and newer.**
 
-All version-dependent behavior lives in `compat.py`, gated on `bpy.app.version`:
+All version-dependent behavior lives in `compat.py`:
 
 | Area | Note |
 |------|------|
+| GPU initialization | 5.2 needs `gpu.init()` before a background process can build a shader or a batch; 4.2 has no such function. `compat.ensure_gpu_ready()` covers both. |
 | Line and point drawing | Shader variants changed at 4.5; branch in one place. |
 | Shader names | Already modern across the target range; keep a single lookup. |
 | `blf` sizing | Stable across the target range; keep the DPI helper centralized anyway. |
 | Any 5.x removals | Absorb in `compat.py` so the rest of the code is version-agnostic. |
 
-Rule: no `if bpy.app.version` outside `compat.py`. The rest of the codebase should read
-as if there were only one version.
+Rule: no version comparison outside `compat.py`, and prefer a capability check
+(`hasattr`, a probe) over comparing numbers when the difference can be detected
+directly. The rest of the codebase should read as if there were only one version.
 
 ---
 
