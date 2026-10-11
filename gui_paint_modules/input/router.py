@@ -51,18 +51,15 @@ def router_for(window):
     return router
 
 
-def _active_router(window):
-    """The router registered for a window, or None. A lookup, never a creation."""
-    if window is None:
-        return None
-    return _ROUTERS.get(window.as_pointer())
+def _forget_pointer(pointer):
+    """Drop a window's router and its modal marker, keyed by the window pointer.
 
-
-def _forget_window(window):
-    """Drop a window's router and its modal marker once the modal has stopped."""
-    if window is None:
+    The modal uses this when it cancels. It takes a pointer and not a window because the
+    window may already be gone by then, and a dead pointer left behind would suppress the
+    next modal for a window that happens to reuse it.
+    """
+    if pointer is None:
         return
-    pointer = window.as_pointer()
     _ROUTERS.pop(pointer, None)
     _MODALS.discard(pointer)
 
@@ -312,14 +309,21 @@ class _RouterModal(bpy.types.Operator):
     bl_label = "gui_paint input router"
     bl_options = {"INTERNAL"}
 
+    # The window captured at invoke, so a cancel can still clean up after the window is gone.
+    _pointer = None
+
     def invoke(self, context, event):
+        window = context.window
+        self._pointer = window.as_pointer() if window is not None else None
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
-        router = _active_router(context.window)
+        window = context.window
+        pointer = window.as_pointer() if window is not None else self._pointer
+        router = _ROUTERS.get(pointer) if pointer is not None else None
         if router is None or not router.running:
-            _forget_window(context.window)
+            _forget_pointer(pointer)
             return {"CANCELLED"}
         if router.handle(event):
             return {"RUNNING_MODAL"}

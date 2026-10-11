@@ -196,6 +196,14 @@ try:
     check("router_for is stable for one window", router_module.router_for(window_a) is first)
     check("another window gets its own router", router_module.router_for(window_b) is not first)
     check("a windowless ask returns None", router_module.router_for(None) is None)
+
+    router_module._ROUTERS[6001] = object()
+    router_module._MODALS.add(6001)
+    router_module._forget_pointer(6001)
+    check("forget drops a dead window's router", 6001 not in router_module._ROUTERS)
+    check("forget drops the modal marker", 6001 not in router_module._MODALS)
+    router_module._forget_pointer(None)
+    check("forget tolerates a missing pointer", True)
 finally:
     router_module._launch_modal = saved_launch
     router_module._ROUTERS.clear()
