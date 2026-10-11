@@ -17,13 +17,21 @@ from checkkit import REPO, banner, check, finish
 
 PACKAGE = REPO / "gui_paint_modules"
 PUBLIC = ("Surface",)
+MODULES = (
+    "__init__.py",
+    "canvas.py",
+    "compat.py",
+    "coords.py",
+    "shaders.py",
+    "surface.py",
+)
 
 banner()
 
 check("package directory exists", PACKAGE.is_dir(), str(PACKAGE))
 
-sources = sorted(path.name for path in PACKAGE.glob("*.py")) if PACKAGE.is_dir() else []
-check("package has modules", len(sources) >= 5, f"found {sources}")
+missing = [name for name in MODULES if not (PACKAGE / name).is_file()]
+check("every expected module exists", not missing, f"missing {missing}")
 
 offenders = []
 for path in PACKAGE.rglob("*.py") if PACKAGE.is_dir() else []:
