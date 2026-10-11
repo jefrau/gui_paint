@@ -45,7 +45,7 @@ def router_for(window):
     pointer = window.as_pointer()
     router = _ROUTERS.get(pointer)
     if router is None:
-        router = InputRouter(window=window)
+        router = InputRouter(window=window, resolve=_area_resolver)
         _ROUTERS[pointer] = router
     return router
 
@@ -55,6 +55,18 @@ def _active_router(window):
     if window is None:
         return None
     return _ROUTERS.get(window.as_pointer())
+
+
+def _area_resolver(router, event):
+    """Pick the surface whose bound area holds the pointer, for a multi-surface window.
+
+    ``bpy.context.area`` is the area under the pointer while a modal runs, and a surface
+    owns exactly one area pointer, so the newest surface owning that area is the target.
+    The whole mapping hinges on that one live fact, which is what the M4 manual step
+    observes with two surfaces in one window.
+    """
+    surface = router.surface_for_area(getattr(bpy.context, "area", None))
+    return surface if surface is not None else router.default_surface
 
 
 def _forget_window(window):
@@ -97,9 +109,10 @@ class InputRouter:
     def __init__(self, resolve=None, window=None):
         """Store the optional resolver and window, and start with no routing state.
 
-        ``resolve`` maps an event to the surface under the pointer; when it is None the
-        newest registered surface is used, which covers the single-surface case. ``window``
-        is only used to stand the modal up and to key the per-window registry.
+        ``resolve(router, event)`` maps an event to the surface under the pointer; when it
+        is None the newest registered surface is used, which covers the single-surface
+        case. ``window`` is only used to stand the modal up and to key the per-window
+        registry.
         """
         self._resolve = resolve
         self._window = window
@@ -113,6 +126,24 @@ class InputRouter:
     def surfaces(self):
         """The registered surfaces, oldest first."""
         return tuple(self._surfaces)
+
+    def surface_for_area(self, area):
+        """The newest registered surface that owns an area, or None.
+
+        This is what maps a live event to a surface when a window holds more than one:
+        a surface owns one area pointer, so the pointer's area names the surface.
+        """
+        if area is None:
+            return None
+        for surface in reversed(self._surfaces):
+            if surface.owns(area):
+                return surface
+        return None
+
+    @property
+    def default_surface(self):
+        """The newest registered surface, the fallback when the pointer names none."""
+        return self._surfaces[-1] if self._surfaces else None
 
     @property
     def window(self):
@@ -210,8 +241,8 @@ class InputRouter:
         """
         # Returns the resolved Surface, or None.
         if self._resolve is not None:
-            return self._resolve(event)
-        return self._surfaces[-1] if self._surfaces else None
+            return self._resolve(self, event)
+        return self.default_surface
 
     def _interactive_at(self, surface, x, y):
         """The interactive node of a surface under the point, or None.
