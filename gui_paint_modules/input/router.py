@@ -13,7 +13,7 @@ at the end of this module.
 
 import bpy
 
-from .events import MOVE, PRESS, RELEASE, classify
+from .events import MOVE, RELEASE, classify
 
 # One router and, at most, one modal per window. Both are keyed by the window pointer, so
 # a closed window can never make a lookup raise.
@@ -109,11 +109,6 @@ class InputRouter:
     def surfaces(self):
         """The registered surfaces, oldest first."""
         return tuple(self._surfaces)
-
-    @property
-    def window(self):
-        """The window this router serves, or None in a background process."""
-        return self._window
 
     @property
     def running(self):
