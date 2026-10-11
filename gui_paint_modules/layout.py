@@ -11,6 +11,8 @@ in the reflow solve, through `coords.logical_to_px`.
 
 _ALIGNMENTS = ("start", "center", "end", "stretch")
 
+# The set the placement chain in `scene._anchor_rect` branches on: a new corner has to be
+# added here and there together, which is why the coupling is stated at both ends.
 _CORNERS = (
     "top_left", "top_right", "bottom_left", "bottom_right",
     "top", "bottom", "left", "right", "center",

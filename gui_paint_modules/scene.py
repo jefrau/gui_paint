@@ -3,8 +3,9 @@
 One Scene owns one root Node and solves the tree into pixel rectangles. The solve is
 the single conversion point between the logical sizes the nodes carry and the pixels
 everything downstream uses: it calls ``coords.logical_to_px`` once per authored value
-and keeps the remaining arithmetic in integers. Drawing and hit-testing then read the
-same rectangles, so the two loops can never disagree.
+and keeps the rest of the arithmetic in whole pixels. The one exception is a widget's
+measured content, which arrives as the font metric's floats and is carried as such.
+Drawing and hit-testing then read the same rectangles, so the two loops never disagree.
 
 The solve runs only when something changed. A node mutation marks the scene dirty (see
 ``Node.mark_dirty``), and passing different metrics or a different box re-solves too,
@@ -262,7 +263,11 @@ class Scene:
         return node._natural
 
     def _anchor_rect(self, node, content_w, content_h, metrics):
-        """The rectangle an anchored node takes inside its parent's content box."""
+        """The rectangle an anchored node takes inside its parent's content box.
+
+        The corners this chain handles are the ones ``layout._CORNERS`` validates, so
+        adding a corner means editing both this chain and that list.
+        """
         margin = _px(node.anchor.margin, metrics)
         width, height = self._boxed_size(node, content_w, content_h, metrics)
         corner = node.anchor.corner

@@ -1,8 +1,8 @@
 """Node — the base element in the scene tree.
 
 A node carries a size policy, a margin, an anchor, a z-order, an optional layout and
-its children. It holds no look: the scene calls a draw hook, and the widgets that give
-a node its appearance arrive with M3.
+its children. It holds no look: the scene calls a draw hook, and the widgets in
+``widgets/`` override it to give a node its appearance.
 
 Every layout-relevant property is a setter that marks the attached scene dirty, so a
 mutation cannot be silently ignored and leave the layout stale. ``mark_dirty`` walks
@@ -52,7 +52,11 @@ class Node:
 
     @property
     def parent(self):
-        """The node this one is a child of, or None while detached."""
+        """The node this one is a child of, or None while detached.
+
+        Public API for a host that navigates the tree: nothing inside the library reads
+        it, because ``mark_dirty`` walks the private chain to the root instead.
+        """
         return self._parent
 
     @property
