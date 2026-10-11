@@ -15,9 +15,10 @@ and cached under that shape, then drawn under a translate-only transform.
 
 import math
 
+import blf
 import gpu
 
-from . import compat, shaders
+from . import compat, coords, shaders
 
 QUAD_BATCH_KEY = "quad"
 
@@ -25,6 +26,10 @@ QUAD_BATCH_KEY = "quad"
 # here is expressed as vertices, never as an index buffer.
 _CIRCLE_SEGMENTS = 32
 _CORNER_SEGMENTS = 6
+
+# Text uses Blender's own font; there is no font loading in M3, and `blf.size` takes the
+# same two arguments on both supported versions (see `check_draw_api`).
+_FONT_ID = 0
 
 
 def quad_triangles() -> tuple:
@@ -97,12 +102,28 @@ def circle_triangles(radius: float, segments: int = _CIRCLE_SEGMENTS) -> tuple:
     return fan_triangles(circle_outline(radius, segments))
 
 
+def measure_text(text: str, size: float, metrics) -> tuple:
+    """Return the size of ``text`` at a logical ``size``, as (width, height) in pixels.
+
+    ``blf.dimensions`` answers without a GPU (see ``check_draw_api``), so a widget can
+    ask for its intrinsic text size during a layout solve and this stays checkable on
+    both targets.
+    """
+    blf.size(_FONT_ID, coords.logical_to_px(size, metrics.scale, metrics.base))
+    return tuple(blf.dimensions(_FONT_ID, text))
+
+
 class Canvas:
     """Immediate-mode 2D drawing surface for one region."""
 
     def __init__(self):
         self._batches = {}
         self._clips = []
+        # The display metrics the draw pass runs under. A bare canvas is at scale one;
+        # the scene overwrites this before it walks a solved tree.
+        self.metrics = coords.DisplayMetrics(1.0, 1.0)
+        # blf has no matrix, so text placement is tracked here as the translate stack.
+        self._translations = [(0.0, 0.0)]
 
     def _batch(self, key, triangles):
         """Return the cached batch for a triangle list, building it on first use.
@@ -143,10 +164,18 @@ class Canvas:
         gpu.matrix.push()
         gpu.matrix.translate((x, y))
         gpu.matrix.scale((w, h))
+        previous = self._translations[-1]
+        self._translations.append((previous[0] + x, previous[1] + y))
 
     def pop_transform(self):
         """Undo the last push_transform()."""
         gpu.matrix.pop()
+        self._translations.pop()
+
+    @property
+    def translation(self):
+        """The accumulated translate offset, which is what text placement uses."""
+        return self._translations[-1]
 
     def push_clip(self, x, y, w, h):
         """Clip subsequent drawing to a rectangle. Pair with pop_clip().
@@ -185,6 +214,26 @@ class Canvas:
     def circle(self, cx, cy, radius, color):
         """Fill a circle with a solid color. Geometry is cached by radius."""
         self._fill(("circle", radius), circle_triangles(radius), cx, cy, color)
+
+    def text(self, x, y, text, size, color, align=None):
+        """Draw a text label, sized from a logical ``size`` and optionally aligned.
+
+        ``blf`` has no matrix, so the label is placed from the translate stack and sized
+        through the display metrics; it does not scale with a transform that scales.
+        ``align`` is ``None``/``"left"``, ``"center"`` or ``"right"``.
+        """
+        if align not in (None, "left", "center", "right"):
+            raise ValueError(f"align must be None, 'left', 'center' or 'right', got {align!r}")
+        width, _ = measure_text(text, size, self.metrics)
+        if align == "center":
+            x -= width / 2.0
+        elif align == "right":
+            x -= width
+        origin_x, origin_y = self.translation
+        blf.size(_FONT_ID, coords.logical_to_px(size, self.metrics.scale, self.metrics.base))
+        blf.color(_FONT_ID, color[0], color[1], color[2], color[3])
+        blf.position(_FONT_ID, origin_x + x, origin_y + y, 0.0)
+        blf.draw(_FONT_ID, text)
 
     def _fill(self, key, triangles, x, y, color):
         """Fill a triangle list that is already in local pixel space, placed at (x, y).

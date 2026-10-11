@@ -76,7 +76,12 @@ class Scene:
         Each node is placed by a translate-only transform, in pixels, and its children
         are entered through the content box. A clipped node pushes its absolute
         rectangle, so the Canvas scissor holds its whole subtree in.
+
+        The metrics the tree was solved under go onto the canvas, because text is sized
+        from logical units at draw time and the canvas is what carries them.
         """
+        if self._metrics is not None:
+            canvas.metrics = self._metrics
         if self._root is not None:
             self._draw_node(self._root, canvas, 0.0, 0.0)
 
