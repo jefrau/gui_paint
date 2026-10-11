@@ -122,6 +122,22 @@ class Node:
     def draw(self, canvas):
         """Draw this node's own look. A bare node draws nothing; M3 overrides this."""
 
+    # -- input hooks --------------------------------------------------------
+
+    def set_hover(self, hot):
+        """The router calls this when the pointer enters or leaves the node.
+
+        A bare node is inert and ignores it; an interactive widget overrides this to
+        change how it looks while hovered.
+        """
+
+    def set_pressed(self, pressed):
+        """The router calls this while the node is held down and again on release.
+
+        A bare node ignores it; an interactive widget overrides this to show the
+        pressed state.
+        """
+
     # -- dirty tracking -----------------------------------------------------
 
     def mark_dirty(self):
