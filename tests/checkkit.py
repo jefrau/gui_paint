@@ -3,8 +3,9 @@
 `tests/run.sh` puts this directory and the repo root on the import path before it
 hands a script to Blender, so a check imports only what it needs from here.
 
-Two decisions live in this module because every check repeats them: the ok/FAIL
-report format, and the failure and skip bookkeeping that sets the process exit status.
+Three decisions live in this module because more than one check repeats them: the
+ok/FAIL report format, the failure and skip bookkeeping that sets the process exit
+status, and the rule that bad input raises `ValueError` rather than another exception.
 """
 
 from pathlib import Path
@@ -34,6 +35,21 @@ def check(label: str, condition: bool, detail: str = "") -> None:
 def skip(reason: str) -> None:
     """Record an environment limitation that is not a failure."""
     skips.append(reason)
+
+
+def raises_value_error(call) -> bool:
+    """Whether a zero-argument call raises ValueError, and nothing else.
+
+    Shared by the checks that pin input validation, so the decision "a bad argument
+    raises ValueError, not TypeError or SystemExit" lives in one place.
+    """
+    try:
+        call()
+    except ValueError:
+        return True
+    except Exception:
+        return False
+    return False
 
 
 def gpu_reachable():

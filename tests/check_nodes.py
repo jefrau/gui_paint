@@ -6,22 +6,11 @@ scene does not exist yet, so this check stands in a recorder for it and asserts 
 property write reaches it through the parent chain.
 """
 
-from checkkit import REPO, banner, check, finish
+from checkkit import REPO, banner, check, finish, raises_value_error
 
 from gui_paint_modules.layout import Anchor, Size, VBox
 
 banner()
-
-
-def _raises_value_error(call) -> bool:
-    """Whether a zero-argument call raises ValueError (and nothing else)."""
-    try:
-        call()
-    except ValueError:
-        return True
-    except Exception:
-        return False
-    return False
 
 
 try:
@@ -76,11 +65,11 @@ if isinstance(Node, type):
     check("the constructor wires its children",
           len(built.children) == 2 and all(child.parent is built for child in built.children))
 
-    check("a node cannot be its own child", _raises_value_error(lambda: parent.add(parent)))
+    check("a node cannot be its own child", raises_value_error(lambda: parent.add(parent)))
     grand = Node()
     grand.add(parent)
     check("a node cannot be added under its own subtree",
-          _raises_value_error(lambda: parent.add(grand)))
+          raises_value_error(lambda: parent.add(grand)))
 
     scene = _Scene()
     root = Node()
@@ -112,7 +101,7 @@ if isinstance(Node, type):
     else:
         check("a mutation with no scene is safe", True)
 
-    check("a negative node margin is rejected", _raises_value_error(lambda: setattr(Node(), "margin", -1)))
+    check("a negative node margin is rejected", raises_value_error(lambda: setattr(Node(), "margin", -1)))
     check("an anchor is kept on the node", Node(anchor=Anchor.center(margin=4)).anchor.margin == 4.0)
 
     text = (REPO / "gui_paint_modules" / "nodes.py").read_text(encoding="utf-8")

@@ -7,7 +7,7 @@ Blender or from the package. The second is a text heuristic, the same kind
 upward, and a whitespace change would slip past it.
 """
 
-from checkkit import REPO, banner, check, finish
+from checkkit import REPO, banner, check, finish, raises_value_error
 
 banner()
 
@@ -18,17 +18,6 @@ except Exception as exc:
     check("layout imports", False, f"{type(exc).__name__}: {exc}")
 else:
     check("layout imports", True)
-
-
-def _raises_value_error(call) -> bool:
-    """Whether a zero-argument call raises ValueError (and nothing else)."""
-    try:
-        call()
-    except ValueError:
-        return True
-    except Exception:
-        return False
-    return False
 
 
 if layout is not None:
@@ -47,21 +36,21 @@ if layout is not None:
         check("Size.fill takes no value", Size.fill().kind == "fill" and Size.fill().value is None)
         percent = Size.percent(0.5)
         check("Size.percent keeps its fraction", percent.kind == "percent" and percent.value == 0.5, repr(percent.value))
-        check("Size.fixed rejects a negative size", _raises_value_error(lambda: Size.fixed(-1)))
-        check("Size.percent rejects zero", _raises_value_error(lambda: Size.percent(0.0)))
-        check("Size.percent rejects more than one", _raises_value_error(lambda: Size.percent(1.5)))
+        check("Size.fixed rejects a negative size", raises_value_error(lambda: Size.fixed(-1)))
+        check("Size.percent rejects zero", raises_value_error(lambda: Size.percent(0.0)))
+        check("Size.percent rejects more than one", raises_value_error(lambda: Size.percent(1.5)))
 
     if isinstance(Anchor, type):
         corner = Anchor.top_left()
         check("Anchor.top_left names its corner", corner.corner == "top_left" and corner.margin == 0.0, repr(corner.corner))
         check("Anchor default margin is zero", Anchor.center().margin == 0.0)
         check("Anchor keeps its margin", Anchor.bottom_right(margin=8).margin == 8.0)
-        check("Anchor rejects a negative margin", _raises_value_error(lambda: Anchor.top_left(margin=-1)))
+        check("Anchor rejects a negative margin", raises_value_error(lambda: Anchor.top_left(margin=-1)))
         corners = ("top_left", "top_right", "bottom_left", "bottom_right",
                    "top", "bottom", "left", "right", "center")
         built = [getattr(Anchor, name)().corner for name in corners]
         check("every anchor corner builds", built == list(corners), str(built))
-        check("Anchor rejects an unknown corner", _raises_value_error(lambda: Anchor("bottom_leftt")))
+        check("Anchor rejects an unknown corner", raises_value_error(lambda: Anchor("bottom_leftt")))
 
     for name, Flow, direction in (("VBox", VBox, "vertical"), ("HBox", HBox, "horizontal")):
         if not isinstance(Flow, type):
@@ -71,9 +60,9 @@ if layout is not None:
         check(f"{name} stacks {direction}", flow.direction == direction, repr(flow.direction))
         kept = Flow(gap=2, padding=3, align="center")
         check(f"{name} keeps its values", (kept.gap, kept.padding, kept.align) == (2.0, 3.0, "center"), repr((kept.gap, kept.padding, kept.align)))
-        check(f"{name} rejects a negative gap", _raises_value_error(lambda: Flow(gap=-1)))
-        check(f"{name} rejects a negative padding", _raises_value_error(lambda: Flow(padding=-1)))
-        check(f"{name} rejects an unknown alignment", _raises_value_error(lambda: Flow(align="middle")))
+        check(f"{name} rejects a negative gap", raises_value_error(lambda: Flow(gap=-1)))
+        check(f"{name} rejects a negative padding", raises_value_error(lambda: Flow(padding=-1)))
+        check(f"{name} rejects an unknown alignment", raises_value_error(lambda: Flow(align="middle")))
 
     offenders = []
     for path in sorted((REPO / "gui_paint_modules").glob("*.py")):

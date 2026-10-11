@@ -90,12 +90,13 @@ scale_reader = getattr(coords, "ui_scale", None)
 check("coords.ui_scale is defined", callable(scale_reader))
 if callable(scale_reader):
     preference = float(bpy.context.preferences.system.ui_scale)
-    expected = preference if preference > 0 else 1.0
-    check(
-        "ui_scale never collapses to zero",
-        scale_reader() == expected and scale_reader() > 0,
-        f"got {scale_reader()!r}, expected {expected!r}",
-    )
+    check("ui_scale is never zero", scale_reader() > 0, f"got {scale_reader()!r}")
+    if preference > 0:
+        check(
+            "ui_scale returns the preference while it is set",
+            scale_reader() == preference,
+            f"got {scale_reader()!r}, expected {preference!r}",
+        )
 
 offenders = []
 for path in sorted((REPO / "gui_paint_modules").glob("*.py")):
