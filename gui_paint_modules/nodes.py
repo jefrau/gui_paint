@@ -23,7 +23,14 @@ class Node:
         self._parent = None
         self._scene = None
         self._children = []
+        # Solved state. The scene's reflow is the only writer: `_rect` in pixels,
+        # `_natural` the measured preferred size, `_padding` the solved content inset,
+        # `_z_order` the children in draw order. They exist from construction so the
+        # draw and hit walks never guess at them, and an unsolved tree is simply inert.
         self._rect = (0.0, 0.0, 0.0, 0.0)
+        self._natural = (0.0, 0.0)
+        self._padding = 0
+        self._z_order = ()
         self._size = Size.auto()
         self._margin = 0.0
         self._anchor = None

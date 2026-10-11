@@ -90,12 +90,10 @@ class Scene:
             canvas.push_clip(left, bottom, node.rect[2], node.rect[3])
         canvas.push_transform(node.rect[0], node.rect[1], 1.0, 1.0)
         node.draw(canvas)
-        padding = getattr(node, "_padding", 0)
+        padding = node._padding
         canvas.push_transform(padding, padding, 1.0, 1.0)
-        children = node.children
-        order = sorted(range(len(children)), key=lambda index: (children[index].z, index))
-        for index in order:
-            self._draw_node(children[index], canvas, left + padding, bottom + padding)
+        for child in node._z_order:
+            self._draw_node(child, canvas, left + padding, bottom + padding)
         canvas.pop_transform()
         canvas.pop_transform()
         if node.clip:
@@ -144,23 +142,29 @@ class Scene:
     # -- place: resolve slots, top-down -------------------------------------
 
     def _place_children(self, node, metrics):
-        """Place a node's children inside its content box, then recurse into them."""
+        """Place a node's children inside its content box, then recurse into them.
+
+        Also writes the node's child-order solved state: the `(z, declaration)` rule
+        lives here and nowhere else, and the draw and hit walks only iterate the result,
+        so neither of them sorts or copies anything per frame.
+        """
         layout = node.layout
         padding = _px(layout.padding, metrics) if layout is not None else 0
-        # Kept on the node so hit-testing can find the content origin without the
-        # metrics; it is solved layout state, like the rect.
         node._padding = padding
         content_w = max(0, node.rect[2] - 2 * padding)
         content_h = max(0, node.rect[3] - 2 * padding)
-        flow = [child for child in node.children if child.anchor is None]
-        anchored = [child for child in node.children if child.anchor is not None]
+        children = node.children
+        node._z_order = tuple(
+            child for _, child in sorted(enumerate(children), key=lambda item: (item[1].z, item[0])))
+        flow = [child for child in children if child.anchor is None]
+        anchored = [child for child in children if child.anchor is not None]
         if layout is None:
             self._place_overlay(flow, content_w, content_h, metrics)
         else:
             self._place_flow(flow, content_w, content_h, layout, metrics)
         for child in anchored:
             child._rect = self._anchor_rect(child, content_w, content_h, metrics)
-        for child in node.children:
+        for child in children:
             self._place_children(child, metrics)
 
     def _place_flow(self, flow, content_w, content_h, layout, metrics):
@@ -298,13 +302,11 @@ class Scene:
         if node.clip and not inside:
             # A clipped node hides everything outside its box, subtree included.
             return None
-        padding = getattr(node, "_padding", 0)
+        padding = node._padding
         content_x = left + padding
         content_y = bottom + padding
-        children = node.children
-        order = sorted(range(len(children)), key=lambda index: (children[index].z, index), reverse=True)
-        for index in order:
-            found = self._hit(children[index], x, y, content_x, content_y)
+        for child in reversed(node._z_order):
+            found = self._hit(child, x, y, content_x, content_y)
             if found is not None:
                 return found
         return node if inside else None
