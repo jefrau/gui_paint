@@ -102,7 +102,7 @@ gui_paint_modules/
     input/
         __init__.py
         router.py        InputRouter: modal lifecycle, dispatch, PASS_THROUGH rules
-        events.py        Normalized event objects for nodes
+        events.py        Normalizes a raw event for the router
     spec.py              The serializable representation (Spec dataclasses)
     spec_json.py         Optional JSON loader/saver for the same representation
     compat.py            Version-gated shims (4.2 vs 4.5+ vs 5.x)
@@ -111,8 +111,8 @@ gui_paint_modules/
 The `input/` package (router and events) exists as of M4; `widgets/menu.py`,
 `widgets/scroll.py`, `icons/atlas.py`, `spec.py` and `spec_json.py` are still targets.
 
-Design rule: lower layers (**canvas**, **coords**, **shaders**, **layout**) must not
-import higher layers. The dependency direction is always outward-in.
+Design rule: lower layers (**canvas**, **coords**, **shaders**, **layout**, **nodes**,
+**scene**) must not import higher layers. The dependency direction is always outward-in.
 
 Relocatability (see D9): the folder is the copyable unit and must work under any
 parent package. This splits into two import contexts:
@@ -547,7 +547,8 @@ enable()  ->  router.register()  ->  first surface arms the window's modal
                                          no
                                          |
                                       PASS_THROUGH   -> Blender keeps working
-disable() ->  router.unregister()  ->  last surface cancels the modal
+disable() ->  router.unregister()  ->  last surface stops the router
+                                        (its modal cancels on the next event)
 ```
 
 ### The key simplification from opt-in
