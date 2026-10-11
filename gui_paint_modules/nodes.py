@@ -95,6 +95,11 @@ class Node:
         """
         return self._rect
 
+    # -- drawing ------------------------------------------------------------
+
+    def draw(self, canvas):
+        """Draw this node's own look. A bare node draws nothing; M3 overrides this."""
+
     # -- dirty tracking -----------------------------------------------------
 
     def mark_dirty(self):

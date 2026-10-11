@@ -15,7 +15,9 @@ bookkeeping, and it survives area splits, joins and fullscreen toggles.
 
 import bpy
 
+from . import coords
 from .canvas import Canvas
+from .scene import Scene
 
 
 class Surface:
@@ -27,6 +29,7 @@ class Surface:
         self.interactive = interactive
         self.canvas = None
         self.draw = None
+        self.scene = Scene()
         self._router = None
         self._handle = None
         self._area = None
@@ -78,5 +81,18 @@ class Surface:
             return
         if self.canvas is None:
             self.canvas = Canvas()
+        self._draw_scene()
         if self.draw is not None:
             self.draw(self.canvas)
+
+    def _draw_scene(self):
+        """Solve and draw the scene into the bound region, when one is available.
+
+        The region and the display metrics come from the live context; a draw callback
+        that runs without a region (as some hosts do) simply skips the scene.
+        """
+        region = getattr(bpy.context, "region", None)
+        if region is None:
+            return
+        self.scene.reflow(coords.region_rect(region), coords.current_metrics())
+        self.scene.draw(self.canvas)

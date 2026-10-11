@@ -68,6 +68,39 @@ class Scene:
             self._place_children(root, metrics)
         self._dirty = False
 
+    # -- draw: back-to-front -------------------------------------------------
+
+    def draw(self, canvas):
+        """Draw the tree back-to-front: ascending ``z``, then declaration order.
+
+        Each node is placed by a translate-only transform, in pixels, and its children
+        are entered through the content box. A clipped node pushes its absolute
+        rectangle, so the Canvas scissor holds its whole subtree in.
+        """
+        if self._root is not None:
+            self._draw_node(self._root, canvas, 0.0, 0.0)
+
+    def _draw_node(self, node, canvas, origin_x, origin_y):
+        """Recursive back-to-front descent. ``origin_*`` is the parent content origin."""
+        if not node.visible:
+            return
+        left = origin_x + node.rect[0]
+        bottom = origin_y + node.rect[1]
+        if node.clip:
+            canvas.push_clip(left, bottom, node.rect[2], node.rect[3])
+        canvas.push_transform(node.rect[0], node.rect[1], 1.0, 1.0)
+        node.draw(canvas)
+        padding = getattr(node, "_padding", 0)
+        canvas.push_transform(padding, padding, 1.0, 1.0)
+        children = node.children
+        order = sorted(range(len(children)), key=lambda index: (children[index].z, index))
+        for index in order:
+            self._draw_node(children[index], canvas, left + padding, bottom + padding)
+        canvas.pop_transform()
+        canvas.pop_transform()
+        if node.clip:
+            canvas.pop_clip()
+
     # -- measure: natural sizes, children first -----------------------------
 
     def _measure(self, node, metrics):
