@@ -12,7 +12,13 @@ from gui_paint_modules.input.events import MOVE, PRESS, RELEASE, classify
 
 banner()
 
-check("the three kinds are distinct", len({MOVE, PRESS, RELEASE}) == 3)
+classified = (
+    classify(StubEvent("MOUSEMOVE", x=5.0, y=5.0)),
+    classify(StubEvent("LEFTMOUSE", "PRESS", x=5.0, y=5.0)),
+    classify(StubEvent("LEFTMOUSE", "RELEASE", x=5.0, y=5.0)),
+)
+check("a move, a press and a release classify to three distinct kinds",
+      len({item[0] for item in classified}) == 3, str(classified))
 
 moved = classify(StubEvent("MOUSEMOVE", x=10.0, y=20.0))
 check("a mouse move classifies as MOVE with its window point",

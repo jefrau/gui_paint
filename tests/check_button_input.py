@@ -29,11 +29,18 @@ def _stage():
 
 
 def _background(button):
-    """Draw the button into a recorder canvas and return the background colour."""
+    """Draw the button into a recorder canvas and return the background colour.
+
+    The recorded call is unpacked by name, so a change to ``rounded_rect``'s arity raises
+    here instead of silently reading the wrong argument.
+    """
     canvas = RecorderCanvas()
     button.draw(canvas)
-    colours = [call[6] for call in canvas.calls if call[0] == "rounded_rect"]
-    return colours[0] if colours else None
+    for name, *args in canvas.calls:
+        if name == "rounded_rect":
+            _x, _y, _width, _height, _radius, colour = args
+            return colour
+    return None
 
 
 banner()
