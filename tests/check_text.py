@@ -1,13 +1,14 @@
 """Verify text: the measurement helper and the primitive's placement maths.
 
-`blf` has no matrix, so `Canvas.text` places a label from the translate stack the scene
-builds, not from `gpu.matrix`. That makes both halves checkable without a GPU: the
-measurement goes through `blf.dimensions`, which answers headless, and the placement is
-observed by swapping the `blf` module for a recorder, so the size, colour, position and
-the drawn string are all asserted exactly.
+`blf` honours the current GPU matrix — `check_draw_api` proves it by rendering a glyph
+under a translated and a scaled matrix and reading the pixels back — so `Canvas.text`
+must hand `blf` the **local** point and let the matrix do the placing. Both halves are
+checkable here: the measurement goes through `blf.dimensions`, which answers headless,
+and the placement is observed by swapping the `blf` module for a recorder, so the size,
+colour, position and the drawn string are all asserted exactly.
 
-Only the pixels `blf.draw` would paint stay unverified, and that is the part a render
-cannot easily read back.
+The one thing this check cannot see is whether the matrix actually moves the glyph, which
+is why that fact has its own assertion in `check_draw_api`.
 """
 
 from math import isclose
@@ -93,23 +94,19 @@ if isinstance(Canvas, type) and callable(getattr(Canvas, "text", None)) and call
         check("right alignment shifts by the width",
               tuple(recorder.last("position")[2:4]) == (4.0 - 10.0, 6.0), str(recorder.last("position")))
 
-        # The translate stack is a gpu.matrix push, so this half needs a reachable GPU.
+        # Pushing a transform needs a GPU matrix. Under one, the canvas must still hand blf
+        # the local point: adding the accumulated offset here would place the label twice.
         gpu = gpu_reachable()
         if gpu is None:
-            skip("the translate stack needs a GPU matrix, so text placement under nested transforms stays unverified here")
+            skip("pushing a transform needs a GPU matrix, so the local-coordinate rule under a pushed transform stays unverified here")
         else:
             gpu.init()
             recorder.calls.clear()
             drawn.push_transform(7.0, 8.0, 1.0, 1.0)
             drawn.text(4.0, 6.0, "hi", 10.0, (1.0, 0.0, 0.0, 1.0))
             drawn.pop_transform()
-            check("the translate stack places the label",
-                  tuple(recorder.last("position")[2:4]) == (11.0, 14.0), str(recorder.last("position")))
-
-            recorder.calls.clear()
-            drawn.text(0.0, 0.0, "hi", 10.0, (1.0, 0.0, 0.0, 1.0))
-            check("popping the transform restores the origin",
-                  tuple(recorder.last("position")[2:4]) == (0.0, 0.0), str(recorder.last("position")))
+            check("a pushed transform leaves the reported position local, not absolute",
+                  tuple(recorder.last("position")[2:4]) == (4.0, 6.0), str(recorder.last("position")))
 
         scaled = Canvas()
         scaled.metrics = coords.DisplayMetrics(2.0, 1.0)

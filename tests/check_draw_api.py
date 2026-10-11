@@ -18,6 +18,7 @@ Everything GPU-bound is gated by `checkkit.gpu_reachable()` and records a skip o
 """
 
 import blf
+from mathutils import Matrix
 
 from checkkit import banner, check, finish, gpu_reachable, skip
 
@@ -46,6 +47,39 @@ def resolves(module, name):
         return type(module.shader.from_builtin(name)).__name__
     except Exception:
         return None
+
+
+def _glyph_span(module, translate=(0.0, 0.0), scale=(1.0, 1.0)):
+    """Render one glyph into an offscreen under translate*scale; return its x-span.
+
+    Returns None when nothing was painted. This is how the check measured that `blf`
+    honours the GPU matrix: a label placed at a local point is moved by the transform,
+    so a canvas must not also add the offset itself.
+    """
+    width = height = 96
+    offscreen = module.types.GPUOffScreen(width, height)
+    with offscreen.bind():
+        module.state.viewport_set(0, 0, width, height)
+        module.matrix.push_projection()
+        module.matrix.load_projection_matrix(Matrix((
+            (2.0 / width, 0.0, 0.0, -1.0),
+            (0.0, 2.0 / height, 0.0, -1.0),
+            (0.0, 0.0, 1.0, 0.0),
+            (0.0, 0.0, 0.0, 1.0),
+        )))
+        offscreen.texture_color.clear(format="FLOAT", value=(0.0, 0.0, 0.0, 1.0))
+        blf.size(0, 18)
+        blf.color(0, 1.0, 1.0, 1.0, 1.0)
+        module.matrix.load_identity()
+        module.matrix.translate(translate)
+        module.matrix.scale(scale)
+        blf.position(0, 2.0, 10.0, 0.0)
+        blf.draw(0, "H")
+        module.matrix.pop_projection()
+    rows = offscreen.texture_color.read().to_list()
+    offscreen.free()
+    lit = [x for x in range(width) for y in range(height) if sum(rows[y][x][:3]) > 30]
+    return (min(lit), max(lit)) if lit else None
 
 
 gpu = gpu_reachable()
@@ -86,5 +120,19 @@ else:
         check("a GPUTexture builds", type(texture).__name__ == "GPUTexture", type(texture).__name__)
     except Exception as exc:
         check("a GPUTexture builds", False, f"{type(exc).__name__}: {exc}")
+
+    # blf and the GPU matrix: the fact a text primitive's placement depends on.
+    plain = _glyph_span(gpu)
+    moved = _glyph_span(gpu, translate=(30.0, 0.0))
+    scaled = _glyph_span(gpu, scale=(2.0, 2.0))
+    check("blf paints into an offscreen, so its placement can be measured",
+          plain is not None, "no ink found")
+    if plain and moved:
+        check("blf honours the matrix translation",
+              abs((moved[0] - plain[0]) - 30) <= 1, f"{plain} moved to {moved}")
+    if plain and scaled:
+        check("blf honours the matrix scale",
+              (scaled[1] - scaled[0]) >= 2 * (plain[1] - plain[0]) - 2,
+              f"{plain} scaled to {scaled}")
 
 finish("draw api")

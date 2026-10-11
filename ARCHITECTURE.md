@@ -325,9 +325,12 @@ and `image` are still to come. Note that a line has no shader to draw it —
 `LINE_UNIFORM_COLOR` does not resolve on 5.2, which `tests/check_draw_api.py` pins — so it
 will be tessellated into triangles when a caller needs it, not drawn by a line shader.
 
-Text is the one primitive sized from logical units at draw time (`blf` has no matrix), so
-the canvas carries the display metrics the scene solved under; the other primitives are
-placed or scaled by solved geometry and take pixels.
+Text is the one primitive sized from logical units at draw time, so the canvas carries the
+display metrics the scene solved under; the other primitives are placed or scaled by
+solved geometry and take pixels. `blf` honours the GPU matrix — measured by
+`tests/check_draw_api.py`, which renders a glyph under a translated and a scaled matrix
+and reads the pixels back — so a label is placed by the same transform stack as everything
+else and the canvas hands it a **local** point, never an accumulated one.
 
 ---
 

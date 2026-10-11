@@ -122,8 +122,6 @@ class Canvas:
         # The display metrics the draw pass runs under. A bare canvas is at scale one;
         # the scene overwrites this before it walks a solved tree.
         self.metrics = coords.DisplayMetrics(1.0, 1.0)
-        # blf has no matrix, so text placement is tracked here as the translate stack.
-        self._translations = [(0.0, 0.0)]
 
     def _batch(self, key, triangles):
         """Return the cached batch for a triangle list, building it on first use.
@@ -164,18 +162,10 @@ class Canvas:
         gpu.matrix.push()
         gpu.matrix.translate((x, y))
         gpu.matrix.scale((w, h))
-        previous = self._translations[-1]
-        self._translations.append((previous[0] + x, previous[1] + y))
 
     def pop_transform(self):
         """Undo the last push_transform()."""
         gpu.matrix.pop()
-        self._translations.pop()
-
-    @property
-    def translation(self):
-        """The accumulated translate offset, which is what text placement uses."""
-        return self._translations[-1]
 
     def push_clip(self, x, y, w, h):
         """Clip subsequent drawing to a rectangle. Pair with pop_clip().
@@ -230,11 +220,13 @@ class Canvas:
         self.shape(("circle", radius), circle_triangles(radius), cx, cy, 1.0, 1.0, color)
 
     def text(self, x, y, text, size, color, align=None):
-        """Draw a text label, sized from a logical ``size`` and optionally aligned.
+        """Draw a text label at a logical ``size``, in this canvas's local space.
 
-        ``blf`` has no matrix, so the label is placed from the translate stack and sized
-        through the display metrics; it does not scale with a transform that scales.
-        ``align`` is ``None``/``"left"``, ``"center"`` or ``"right"``.
+        ``blf`` honours the current GPU matrix — ``check_draw_api`` proves it by rendering
+        one glyph under a translated and a scaled matrix and reading the pixels back — so
+        the label is placed by the same transform stack as every other primitive. Only the
+        font size is ours to convert, through the display metrics. ``align`` is
+        ``None``/``"left"``, ``"center"`` or ``"right"``.
         """
         if align not in (None, "left", "center", "right"):
             raise ValueError(f"align must be None, 'left', 'center' or 'right', got {align!r}")
@@ -243,10 +235,9 @@ class Canvas:
             x -= width / 2.0
         elif align == "right":
             x -= width
-        origin_x, origin_y = self.translation
         blf.size(_FONT_ID, coords.logical_to_px(size, self.metrics.scale, self.metrics.base))
         blf.color(_FONT_ID, color[0], color[1], color[2], color[3])
-        blf.position(_FONT_ID, origin_x + x, origin_y + y, 0.0)
+        blf.position(_FONT_ID, x, y, 0.0)
         blf.draw(_FONT_ID, text)
 
 
