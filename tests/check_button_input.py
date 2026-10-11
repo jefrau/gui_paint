@@ -23,16 +23,22 @@ class _Event:
     def __init__(self, type, value="NOTHING", x=0.0, y=0.0):
         self.type = type
         self.value = value
-        self.mouse_region_x = x
-        self.mouse_region_y = y
+        self.mouse_x = x
+        self.mouse_y = y
+        self.mouse_region_x = -1
+        self.mouse_region_y = -1
 
 
 class _Surface:
-    """Stand-in for a surface: a solved scene and a redraw counter."""
+    """Stand-in for a surface: a solved scene, its region and a redraw counter."""
 
     def __init__(self, scene):
         self.scene = scene
         self.redraws = 0
+
+    def window_rect(self):
+        """The surface's region in window pixels, matching the scene's 200x200 box."""
+        return (0.0, 0.0, 200.0, 200.0)
 
     def _tag_redraw(self):
         """Count one repaint request."""

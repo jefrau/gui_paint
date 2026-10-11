@@ -11,13 +11,19 @@ from gui_paint_modules.input.events import MOVE, PRESS, RELEASE, classify
 
 
 class _Event:
-    """Stand-in carrying exactly the fields the normalizer reads."""
+    """Stand-in carrying exactly the fields the normalizer reads.
+
+    ``mouse_region_x/y`` is (-1, -1) to mirror a window-level modal, which has no region;
+    the normalizer must use the window point instead.
+    """
 
     def __init__(self, type, value="NOTHING", x=0.0, y=0.0):
         self.type = type
         self.value = value
-        self.mouse_region_x = x
-        self.mouse_region_y = y
+        self.mouse_x = x
+        self.mouse_y = y
+        self.mouse_region_x = -1
+        self.mouse_region_y = -1
 
 
 banner()
@@ -25,7 +31,7 @@ banner()
 check("the three kinds are distinct", len({MOVE, PRESS, RELEASE}) == 3)
 
 moved = classify(_Event("MOUSEMOVE", x=10.0, y=20.0))
-check("a mouse move classifies as MOVE with its region-local point",
+check("a mouse move classifies as MOVE with its window point",
       moved == (MOVE, 10.0, 20.0), repr(moved))
 
 pressed = classify(_Event("LEFTMOUSE", "PRESS", x=1.0, y=2.0))

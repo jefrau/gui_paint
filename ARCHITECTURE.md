@@ -144,8 +144,12 @@ Rules:
    Only the root is relative to the region.
 4. **Only one conversion point** between this space and any other (window/screen/area).
    It lives in `coords.py` and nowhere else.
-5. **Events arrive region-local too** (`mouse_region_x/y`), so hit-testing needs no
-   conversion at all. This is the payoff of choosing the native space.
+5. **Mouse events carry a window point, and the router converts it.** A window-level
+   modal has no region, so Blender reports `mouse_region_x/y` as `(-1, -1)`; the coordinate
+   that is always valid is `mouse_x`/`mouse_y`, in window pixels with a bottom-left origin.
+   The router subtracts the surface's region origin (read from the live area) to reach the
+   region-local point the scene was solved in. Both the `(-1, -1)` fact and the subtraction
+   were measured on a live 5.2, not assumed.
 
 ```python
 # coords.py (illustrative)
@@ -524,10 +528,12 @@ Blender-derived one — without special-casing it in code.
 
 ## Input router
 
-The router turns region-local mouse events into node interactions. It runs **only while
-an interactive surface is enabled**. Two decisions are settled here: the modal runs for
-the whole time a surface is enabled, so hover is free, and one router per window is shared
-by every interactive surface in it.
+The router turns mouse events into node interactions. It runs **only while an interactive
+surface is enabled**. A window-level modal reports each event in window pixels, so the
+router finds the surface whose region holds the point and converts it to that region's
+local space before hit-testing. Two decisions are settled here: the modal runs for the
+whole time a surface is enabled, so hover is free, and one router per window is shared by
+every interactive surface in it.
 
 ### Lifecycle
 
@@ -565,9 +571,9 @@ These rules are what keep an interactive overlay from breaking the host applicat
 4. **One router per window.** Every interactive surface in a window shares one router and
    one modal: the first surface to enable arms it and the last to disable takes it down, so
    a window never runs two modals over the same events. An event goes to the newest surface
-   that owns the pointer's area. `input/events.py` normalizes a raw event to a move, a left
-   press or a left release before the router sees it, so a key, a wheel tick or another
-   button never reaches a node.
+   whose region holds the pointer, converted to that region's local space. `input/events.py`
+   normalizes a raw event to a move, a left press or a left release before the router sees
+   it, so a key, a wheel tick or another button never reaches a node.
 
 ```python
 class InputRouter:
@@ -788,10 +794,6 @@ loops are solid. Everything else is easier once those are right.
 - Is a stable node id needed for saved layouts and diffing, or are positional paths
   enough?
 - Which external icon sheet format to support first (atlas + JSON index is the simplest).
-- Is the pointer's area (`bpy.context.area` during a modal) the right way to name the
-  target surface when a window holds several? The resolver falls back to the newest
-  surface when no area matches; the M4 manual step with a split viewport is where the
-  mapping is observed live.
 
 ---
 

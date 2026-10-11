@@ -74,6 +74,26 @@ class Surface:
         """Whether this surface draws in the given area."""
         return area is not None and area.as_pointer() == self._area_ptr
 
+    def window_rect(self):
+        """The surface's region in window pixels, or None when it is gone.
+
+        Returns (x, y, width, height) with the window's bottom-left as the origin, the same
+        space an event's ``mouse_x``/``mouse_y`` use. A window-level modal has no region and
+        reports window coordinates, so the router subtracts this origin to reach the
+        region-local point the scene was solved in.
+        """
+        area = self._area
+        if area is None:
+            return None
+        try:
+            region = next((item for item in area.regions if item.type == self.region_type), None)
+        except ReferenceError:
+            # The area was closed while the surface was enabled; nothing to convert against.
+            return None
+        if region is None:
+            return None
+        return (float(region.x), float(region.y), float(region.width), float(region.height))
+
     def _tag_redraw(self):
         """Ask the bound area to repaint, so a state change becomes visible."""
         area = self._area

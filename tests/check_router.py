@@ -45,16 +45,26 @@ class _Event:
     def __init__(self, type, value="NOTHING", x=0.0, y=0.0):
         self.type = type
         self.value = value
-        self.mouse_region_x = x
-        self.mouse_region_y = y
+        self.mouse_x = x
+        self.mouse_y = y
+        self.mouse_region_x = -1
+        self.mouse_region_y = -1
 
 
 class _Surface:
-    """Stand-in for a surface: a solved scene and a redraw counter."""
+    """Stand-in for a surface: a solved scene, a fixed region and a redraw counter.
+
+    ``window_rect`` returns the region in window pixels with the origin at (0, 0), so a
+    window point equals the region-local point and the checks read plainly.
+    """
 
     def __init__(self, scene):
         self.scene = scene
         self.redraws = 0
+
+    def window_rect(self):
+        """The surface's region in window pixels, matching the scene's 200x200 box."""
+        return (0.0, 0.0, 200.0, 200.0)
 
     def _tag_redraw(self):
         """Count one repaint request from the router."""
@@ -186,6 +196,20 @@ consumed = router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
 check("the default target is the newest surface",
       consumed is True and newer_probe.hover_states == [True], str(newer_probe.hover_states))
 check("the older surface is left untouched", older_probe.hover_states == [], str(older_probe.hover_states))
+
+# -- a window point is converted against the surface's region origin ---------
+
+offset_surface, offset_probe = _stage()
+offset_surface.window_rect = lambda: (1000.0, 500.0, 200.0, 200.0)
+router = InputRouter()
+router.register(offset_surface)
+consumed = router.handle(_Event("MOUSEMOVE", x=1010.0, y=510.0))
+check("a window point inside the region is converted and consumed", consumed is True)
+check("the converted point sets hover", offset_probe.hover_states == [True], str(offset_probe.hover_states))
+consumed = router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+check("a window point outside the region passes through", consumed is False)
+check("an outside window point clears the hover", offset_probe.hover_states == [True, False],
+      str(offset_probe.hover_states))
 
 # -- one router per window --------------------------------------------------
 

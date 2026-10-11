@@ -1,13 +1,14 @@
-"""InputRouter — dispatch region-local mouse events to scene nodes.
+"""InputRouter — dispatch mouse events to the interactive nodes of a window.
 
-The router is the single entry point for the input loop: it normalizes a raw event,
-finds the interactive node under the pointer, and drives its hover, press and click
-hooks. An event that lands on nothing interactive passes through to Blender untouched.
+The router is the single entry point for the input loop: it normalizes a raw event, finds
+the surface whose region holds the pointer, converts the point into that region's local
+space, and drives the interactive node's hover, press and click hooks. An event that lands
+on nothing interactive passes through to Blender untouched.
 
 One router serves one window, and every interactive surface in the window shares it. The
-dispatch reads no Blender state and is checkable headless; the modal that feeds it and the
-"which surface is under the pointer" resolver are injected, and the per-window registry
-and the modal operator live at the end of this module.
+dispatch reads no Blender state and is checkable headless: the surface supplies its region
+rectangle, and a check substitutes one. The per-window registry and the modal operator live
+at the end of this module.
 """
 
 import bpy
@@ -45,7 +46,7 @@ def router_for(window):
     pointer = window.as_pointer()
     router = _ROUTERS.get(pointer)
     if router is None:
-        router = InputRouter(window=window, resolve=_area_resolver)
+        router = InputRouter(window=window)
         _ROUTERS[pointer] = router
     return router
 
@@ -55,18 +56,6 @@ def _active_router(window):
     if window is None:
         return None
     return _ROUTERS.get(window.as_pointer())
-
-
-def _area_resolver(router, event):
-    """Pick the surface whose bound area holds the pointer, for a multi-surface window.
-
-    ``bpy.context.area`` is the area under the pointer while a modal runs, and a surface
-    owns exactly one area pointer, so the newest surface owning that area is the target.
-    The whole mapping hinges on that one live fact, which is what the M4 manual step
-    observes with two surfaces in one window.
-    """
-    surface = router.surface_for_area(getattr(bpy.context, "area", None))
-    return surface if surface is not None else router.default_surface
 
 
 def _forget_window(window):
@@ -106,15 +95,12 @@ class InputRouter:
     instead of firing.
     """
 
-    def __init__(self, resolve=None, window=None):
-        """Store the optional resolver and window, and start with no routing state.
+    def __init__(self, window=None):
+        """Store the window and start with no routing state.
 
-        ``resolve(router, event)`` maps an event to the surface under the pointer; when it
-        is None the newest registered surface is used, which covers the single-surface
-        case. ``window`` is only used to stand the modal up and to key the per-window
-        registry.
+        ``window`` is only used to stand the modal up and to key the per-window registry;
+        the dispatch itself never reads it.
         """
-        self._resolve = resolve
         self._window = window
         self._running = False
         self._surfaces = []
@@ -126,24 +112,6 @@ class InputRouter:
     def surfaces(self):
         """The registered surfaces, oldest first."""
         return tuple(self._surfaces)
-
-    def surface_for_area(self, area):
-        """The newest registered surface that owns an area, or None.
-
-        This is what maps a live event to a surface when a window holds more than one:
-        a surface owns one area pointer, so the pointer's area names the surface.
-        """
-        if area is None:
-            return None
-        for surface in reversed(self._surfaces):
-            if surface.owns(area):
-                return surface
-        return None
-
-    @property
-    def default_surface(self):
-        """The newest registered surface, the fallback when the pointer names none."""
-        return self._surfaces[-1] if self._surfaces else None
 
     @property
     def window(self):
@@ -212,8 +180,11 @@ class InputRouter:
     def handle(self, event):
         """Process one event and report whether the router consumed it.
 
-        Returns True when the event was consumed, False to pass it through to Blender:
-        a key, a wheel tick, another button, or a lone CLICK never reaches a node.
+        The point arrives in window pixels, because a window-level modal has no region.
+        The router finds the surface whose region holds it and converts to that region's
+        local space before hit-testing. Returns True when the event was consumed, False to
+        pass it through: a key, a wheel tick, another button, or a lone CLICK never reaches
+        a node.
         """
         classified = classify(event)
         if classified is None:
@@ -225,24 +196,30 @@ class InputRouter:
         if kind == RELEASE:
             return self._on_release(x, y)
 
-        surface = self._target(event)
-        if surface is None:
+        located = self._locate(x, y)
+        if located is None:
             self._set_hover(None, None)
             return False
+        surface, (local_x, local_y) = located
         if kind == MOVE:
-            return self._on_move(surface, x, y)
-        return self._on_press(surface, x, y)
+            return self._on_move(surface, local_x, local_y)
+        return self._on_press(surface, local_x, local_y)
 
-    def _target(self, event):
-        """The surface an event belongs to, or None when there is none.
+    def _locate(self, x, y):
+        """The newest surface whose region holds a window point, with local coordinates.
 
-        Uses the injected resolver when present; otherwise the newest registered
-        surface, which is the whole answer for a single-surface scene.
+        Returns (surface, (local_x, local_y)) or None. A surface's region rectangle comes
+        from its live area, so a moved or closed area simply stops matching and the event
+        falls through to whichever surface still contains the pointer.
         """
-        # Returns the resolved Surface, or None.
-        if self._resolve is not None:
-            return self._resolve(self, event)
-        return self.default_surface
+        for surface in reversed(self._surfaces):
+            rect = surface.window_rect()
+            if rect is None:
+                continue
+            left, bottom, width, height = rect
+            if left <= x < left + width and bottom <= y < bottom + height:
+                return (surface, (x - left, y - bottom))
+        return None
 
     def _interactive_at(self, surface, x, y):
         """The interactive node of a surface under the point, or None.
@@ -285,8 +262,9 @@ class InputRouter:
     def _on_release(self, x, y):
         """Finish the armed gesture, firing the click when it ends on the same node.
 
-        A press consumed the gesture, so its release is consumed too, even when it
-        lands outside and fires nothing.
+        The point is a window point; it is converted against the pressed surface's own
+        region, so a release in another area simply misses. A press consumed the gesture,
+        so its release is consumed too, even when it fires nothing.
         """
         # Returns True when a gesture was armed, False when there was nothing to finish.
         if self._pressed is None:
@@ -294,7 +272,10 @@ class InputRouter:
         surface, node = self._pressed
         self._pressed = None
         node.set_pressed(False)
-        landed = self._interactive_at(surface, x, y)
+        landed = None
+        rect = surface.window_rect()
+        if rect is not None:
+            landed = self._interactive_at(surface, x - rect[0], y - rect[1])
         self._set_hover(surface, landed)
         if landed is node:
             node.on_click()
