@@ -7,13 +7,24 @@ A solid rectangle reuses one cached unit quad under a transform, so the geometry
 built once per canvas instead of once per rectangle. The unit quad carries its two
 triangles as six vertices: task M1.4 probed Blender's indexed-batch constructor and
 found it rejects the documented shape, while a plain triangle list is accepted.
+
+A rounded rectangle and a circle do **not** reuse a unit shape: scaling a unit box would
+stretch a round corner into an ellipse, so their geometry is built at its real pixel size
+and cached under that shape, then drawn under a translate-only transform.
 """
+
+import math
 
 import gpu
 
 from . import compat, shaders
 
 QUAD_BATCH_KEY = "quad"
+
+# A plain triangle list is what the GPU batch constructor accepts (M1.4), so every shape
+# here is expressed as vertices, never as an index buffer.
+_CIRCLE_SEGMENTS = 32
+_CORNER_SEGMENTS = 6
 
 
 def quad_triangles() -> tuple:
@@ -27,6 +38,65 @@ def quad_triangles() -> tuple:
     )
 
 
+def circle_outline(radius: float, segments: int = _CIRCLE_SEGMENTS) -> tuple:
+    """Return a circle centred on the origin as a closed outline, counter-clockwise."""
+    return tuple(
+        (radius * math.cos(2.0 * math.pi * step / segments),
+         radius * math.sin(2.0 * math.pi * step / segments))
+        for step in range(segments)
+    )
+
+
+def rounded_rect_outline(w: float, h: float, radius: float,
+                         segments: int = _CORNER_SEGMENTS) -> tuple:
+    """Return the (0, 0) to (w, h) rounded rectangle as a closed outline.
+
+    The radius is clamped to half the short side, and a zero radius returns the four
+    corners, so a plain rectangle is the degenerate case rather than a special shape.
+    """
+    radius = max(0.0, min(float(radius), min(w, h) / 2.0))
+    if radius == 0.0:
+        return ((0.0, 0.0), (w, 0.0), (w, h), (0.0, h))
+    corners = (
+        ((w - radius, radius), -math.pi / 2.0, 0.0),
+        ((w - radius, h - radius), 0.0, math.pi / 2.0),
+        ((radius, h - radius), math.pi / 2.0, math.pi),
+        ((radius, radius), math.pi, 3.0 * math.pi / 2.0),
+    )
+    points = []
+    for (cx, cy), start, end in corners:
+        for step in range(segments + 1):
+            angle = start + (end - start) * step / segments
+            points.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
+    return tuple(points)
+
+
+def fan_triangles(outline) -> tuple:
+    """Return a convex outline as a triangle list, fanned from its centroid.
+
+    A rounded rectangle and a circle are both convex, so the fan is exact. A concave
+    outline would need a real tessellator, and nothing asks for one yet.
+    """
+    count = len(outline)
+    cx = sum(point[0] for point in outline) / count
+    cy = sum(point[1] for point in outline) / count
+    triangles = []
+    for index, point in enumerate(outline):
+        triangles.extend(((cx, cy), point, outline[(index + 1) % count]))
+    return tuple(triangles)
+
+
+def rounded_rect_triangles(w: float, h: float, radius: float,
+                           segments: int = _CORNER_SEGMENTS) -> tuple:
+    """Return the rounded rectangle as a triangle list, in local pixel space."""
+    return fan_triangles(rounded_rect_outline(w, h, radius, segments))
+
+
+def circle_triangles(radius: float, segments: int = _CIRCLE_SEGMENTS) -> tuple:
+    """Return a circle centred on the origin as a triangle list."""
+    return fan_triangles(circle_outline(radius, segments))
+
+
 class Canvas:
     """Immediate-mode 2D drawing surface for one region."""
 
@@ -34,27 +104,32 @@ class Canvas:
         self._batches = {}
         self._clips = []
 
-    def _quad_batch(self):
-        """Return the cached unit-quad batch, building it on first use."""
-        batch = self._batches.get(QUAD_BATCH_KEY)
+    def _batch(self, key, triangles):
+        """Return the cached batch for a triangle list, building it on first use.
+
+        The key is the geometry signature: everything that changes the vertices has to
+        be part of it, or two shapes would share one batch.
+        """
+        batch = self._batches.get(key)
         if batch is None:
             compat.ensure_gpu_ready()
             fmt = gpu.types.GPUVertFormat()
             fmt.attr_add(id="pos", comp_type="F32", len=2, fetch_mode="FLOAT")
-            buf = gpu.types.GPUVertBuf(len=6, format=fmt)
-            buf.attr_fill(id="pos", data=quad_triangles())
+            buf = gpu.types.GPUVertBuf(len=len(triangles), format=fmt)
+            buf.attr_fill(id="pos", data=triangles)
             batch = gpu.types.GPUBatch(type="TRIS", buf=buf)
-            self._batches[QUAD_BATCH_KEY] = batch
+            self._batches[key] = batch
         return batch
 
     def prepare(self) -> None:
         """Build the cached GPU resources now, so the first draw does not have to.
 
         Best effort: a surface can be enabled before a GPU context exists, in which
-        case the first draw builds them instead.
+        case the first draw builds them instead. Only the unit quad is warmed, because
+        the other shapes depend on sizes that are not known here.
         """
         try:
-            self._quad_batch()
+            self._batch(QUAD_BATCH_KEY, quad_triangles())
             shaders.uniform_color()
         except (RuntimeError, SystemError):
             return
@@ -93,9 +168,33 @@ class Canvas:
 
     def rect(self, x, y, w, h, color):
         """Fill an axis-aligned rectangle with a solid color."""
-        batch = self._quad_batch()
+        batch = self._batch(QUAD_BATCH_KEY, quad_triangles())
         shader = shaders.uniform_color()
         self.push_transform(x, y, w, h)
+        try:
+            shader.bind()
+            shader.uniform_float("color", color)
+            batch.draw(shader)
+        finally:
+            self.pop_transform()
+
+    def rounded_rect(self, x, y, w, h, radius, color):
+        """Fill a rectangle with rounded corners. Geometry is cached by shape."""
+        self._fill(("round", w, h, radius), rounded_rect_triangles(w, h, radius), x, y, color)
+
+    def circle(self, cx, cy, radius, color):
+        """Fill a circle with a solid color. Geometry is cached by radius."""
+        self._fill(("circle", radius), circle_triangles(radius), cx, cy, color)
+
+    def _fill(self, key, triangles, x, y, color):
+        """Fill a triangle list that is already in local pixel space, placed at (x, y).
+
+        Unlike `rect`, which scales one cached unit quad, a shape built at its real size
+        is only translated, so a round corner cannot stretch with the box.
+        """
+        batch = self._batch(key, triangles)
+        shader = shaders.uniform_color()
+        self.push_transform(x, y, 1.0, 1.0)
         try:
             shader.bind()
             shader.uniform_float("color", color)
