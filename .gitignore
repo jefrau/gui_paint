@@ -3,3 +3,4 @@ __pycache__/
 *.blend[0-9]
 .venv/
 venv/
+odd/
