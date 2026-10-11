@@ -195,9 +195,14 @@ class Canvas:
         else:
             gpu.state.scissor_test_set(False)
 
-    def rect(self, x, y, w, h, color):
-        """Fill an axis-aligned rectangle with a solid color."""
-        batch = self._batch(QUAD_BATCH_KEY, quad_triangles())
+    def shape(self, key, triangles, x, y, w, h, color):
+        """Fill a triangle list defined in a unit box, scaled into (x, y, w, h).
+
+        The key is the geometry signature: whatever changes the vertices has to be part
+        of it, or two shapes would share one batch. Pass ``w = h = 1`` to draw geometry
+        that is already in pixels.
+        """
+        batch = self._batch(key, triangles)
         shader = shaders.uniform_color()
         self.push_transform(x, y, w, h)
         try:
@@ -207,13 +212,22 @@ class Canvas:
         finally:
             self.pop_transform()
 
+    def rect(self, x, y, w, h, color):
+        """Fill an axis-aligned rectangle with a solid color."""
+        self.shape(QUAD_BATCH_KEY, quad_triangles(), x, y, w, h, color)
+
     def rounded_rect(self, x, y, w, h, radius, color):
-        """Fill a rectangle with rounded corners. Geometry is cached by shape."""
-        self._fill(("round", w, h, radius), rounded_rect_triangles(w, h, radius), x, y, color)
+        """Fill a rectangle with rounded corners. Geometry is cached by shape.
+
+        The geometry is built at its real size and drawn unscaled, because scaling one
+        unit shape would stretch a round corner into an ellipse.
+        """
+        self.shape(("round", w, h, radius), rounded_rect_triangles(w, h, radius),
+                   x, y, 1.0, 1.0, color)
 
     def circle(self, cx, cy, radius, color):
         """Fill a circle with a solid color. Geometry is cached by radius."""
-        self._fill(("circle", radius), circle_triangles(radius), cx, cy, color)
+        self.shape(("circle", radius), circle_triangles(radius), cx, cy, 1.0, 1.0, color)
 
     def text(self, x, y, text, size, color, align=None):
         """Draw a text label, sized from a logical ``size`` and optionally aligned.
@@ -235,18 +249,4 @@ class Canvas:
         blf.position(_FONT_ID, origin_x + x, origin_y + y, 0.0)
         blf.draw(_FONT_ID, text)
 
-    def _fill(self, key, triangles, x, y, color):
-        """Fill a triangle list that is already in local pixel space, placed at (x, y).
 
-        Unlike `rect`, which scales one cached unit quad, a shape built at its real size
-        is only translated, so a round corner cannot stretch with the box.
-        """
-        batch = self._batch(key, triangles)
-        shader = shaders.uniform_color()
-        self.push_transform(x, y, 1.0, 1.0)
-        try:
-            shader.bind()
-            shader.uniform_float("color", color)
-            batch.draw(shader)
-        finally:
-            self.pop_transform()
