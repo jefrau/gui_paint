@@ -27,6 +27,12 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE.parent))  # repo root, so gui_paint_modules imports
 sys.path.insert(0, str(_HERE))  # tests/, so `import manual_m2` works from the console
 
+# Blender runs this file as `__main__`, so a bare `import manual_m2` from the console
+# would build a second, empty module whose _state knows nothing about the armed
+# surface. Aliasing the running module under its own name makes the documented console
+# commands (probe/stop) act on the one that is actually armed.
+sys.modules.setdefault("manual_m2", sys.modules[__name__])
+
 import bpy
 
 from gui_paint_modules import Anchor, Node, Scene, Size, Surface, VBox
