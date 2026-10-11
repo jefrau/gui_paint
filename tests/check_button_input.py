@@ -4,7 +4,7 @@ The button is built into a real solved scene and driven by a real router through
 synthetic events, so the interaction is checked end to end without a live modal.
 """
 
-from checkkit import RecorderCanvas, banner, check, finish
+from checkkit import RecorderCanvas, StubEvent, StubSurface, banner, check, finish
 
 from gui_paint_modules.coords import DisplayMetrics
 from gui_paint_modules.input.router import InputRouter
@@ -17,34 +17,6 @@ BOX = (0.0, 0.0, 200.0, 200.0)
 METRICS = DisplayMetrics(1.0, 1.0)
 
 
-class _Event:
-    """Stand-in carrying the fields the normalizer reads."""
-
-    def __init__(self, type, value="NOTHING", x=0.0, y=0.0):
-        self.type = type
-        self.value = value
-        self.mouse_x = x
-        self.mouse_y = y
-        self.mouse_region_x = -1
-        self.mouse_region_y = -1
-
-
-class _Surface:
-    """Stand-in for a surface: a solved scene, its region and a redraw counter."""
-
-    def __init__(self, scene):
-        self.scene = scene
-        self.redraws = 0
-
-    def window_rect(self):
-        """The surface's region in window pixels, matching the scene's 200x200 box."""
-        return (0.0, 0.0, 200.0, 200.0)
-
-    def _tag_redraw(self):
-        """Count one repaint request."""
-        self.redraws += 1
-
-
 def _stage():
     """Build a solved scene with one fixed-size Button at (0, 0, 40, 40)."""
     clicks = []
@@ -53,7 +25,7 @@ def _stage():
     root.add(button)
     scene = Scene(root)
     scene.reflow(BOX, METRICS)
-    return _Surface(scene), button, clicks
+    return StubSurface(scene), button, clicks
 
 
 def _background(button):
@@ -81,27 +53,27 @@ check("the fixed button solves to its box", button.rect == (0.0, 0.0, 40.0, 40.0
 idle_shade = _background(button)
 check("an idle button draws a background", idle_shade is not None, str(idle_shade))
 
-router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+router.handle(StubEvent("MOUSEMOVE", x=10.0, y=10.0))
 check("a move over the button sets it hot", button._hot is True)
 hover_shade = _background(button)
 check("hover changes the shade", hover_shade != idle_shade, f"{hover_shade} vs {idle_shade}")
 
-router.handle(_Event("MOUSEMOVE", x=150.0, y=150.0))
+router.handle(StubEvent("MOUSEMOVE", x=150.0, y=150.0))
 check("a move off the button clears hot", button._hot is False)
 check("leaving restores the idle shade", _background(button) == idle_shade)
 
-router.handle(_Event("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
+router.handle(StubEvent("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
 check("a press sets the button pressed", button._pressed is True)
 check("a press keeps it hot", button._hot is True)
 pressed_shade = _background(button)
 check("press changes the shade again", pressed_shade not in (idle_shade, hover_shade), str(pressed_shade))
 
-router.handle(_Event("LEFTMOUSE", "RELEASE", x=10.0, y=10.0))
+router.handle(StubEvent("LEFTMOUSE", "RELEASE", x=10.0, y=10.0))
 check("a release inside fires on_click once", clicks == [1], str(clicks))
 check("a release clears pressed", button._pressed is False)
 
-router.handle(_Event("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
-router.handle(_Event("LEFTMOUSE", "RELEASE", x=150.0, y=150.0))
+router.handle(StubEvent("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
+router.handle(StubEvent("LEFTMOUSE", "RELEASE", x=150.0, y=150.0))
 check("a release outside fires nothing", clicks == [1], str(clicks))
 
 # The flags are look-only: flipping them must not mark the solved layout dirty.

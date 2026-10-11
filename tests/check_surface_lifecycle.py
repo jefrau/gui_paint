@@ -8,7 +8,7 @@ finishes.
 
 import bpy
 
-from checkkit import StubArea, StubSpace, banner, check, finish
+from checkkit import StubArea, StubSpace, StubWindow, banner, check, finish
 
 from gui_paint_modules.canvas import Canvas
 from gui_paint_modules.surface import Surface
@@ -20,16 +20,6 @@ class _Context:
     def __init__(self, area, window=None):
         self.area = area
         self.window = window
-
-
-class _Window:
-    """Stands in for a Blender window: an identity for the per-window router registry."""
-
-    def __init__(self, pointer):
-        self._pointer = pointer
-
-    def as_pointer(self):
-        return self._pointer
 
 
 banner()
@@ -109,7 +99,7 @@ try:
     router_module._MODALS.clear()
     router_module._launch_modal = lambda router: launches.append(router)
 
-    window = _Window(7777)
+    window = StubWindow(7777)
     context.window = window
     try:
         interactive = Surface("SpaceView3D", interactive=True)

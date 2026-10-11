@@ -94,6 +94,52 @@ class StubSpace:
         self.removed.append((handle, region_type))
 
 
+class StubEvent:
+    """Stand-in for a Blender event carrying the fields the normalizer reads.
+
+    ``mouse_region_x/y`` is (-1, -1) to mirror a window-level modal, which has no region;
+    the normalizer must use the window point instead.
+    """
+
+    def __init__(self, type, value="NOTHING", x=0.0, y=0.0):
+        self.type = type
+        self.value = value
+        self.mouse_x = x
+        self.mouse_y = y
+        self.mouse_region_x = -1
+        self.mouse_region_y = -1
+
+
+class StubSurface:
+    """Stand-in for a surface: a solved scene, a region rect and a redraw counter.
+
+    ``window_rect`` returns the region in window pixels with the origin at (0, 0), so a
+    window point equals the region-local point; assign an instance attribute to move it.
+    """
+
+    def __init__(self, scene):
+        self.scene = scene
+        self.redraws = 0
+
+    def window_rect(self):
+        """The surface's region in window pixels, spanning (0, 0) to (200, 200)."""
+        return (0.0, 0.0, 200.0, 200.0)
+
+    def _tag_redraw(self):
+        """Count one repaint request from the router."""
+        self.redraws += 1
+
+
+class StubWindow:
+    """Stand-in for a Blender window: an identity for the router registry."""
+
+    def __init__(self, pointer):
+        self._pointer = pointer
+
+    def as_pointer(self):
+        return self._pointer
+
+
 def raises_value_error(call) -> bool:
     """Whether a zero-argument call raises ValueError, and nothing else.
 

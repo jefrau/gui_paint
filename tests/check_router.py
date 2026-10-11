@@ -5,7 +5,7 @@ The router turns a normalized mouse event into node hooks. This check builds a r
 Blender fact is faked and no run loop is needed.
 """
 
-from checkkit import banner, check, finish
+from checkkit import StubEvent, StubSurface, StubWindow, banner, check, finish
 
 from gui_paint_modules.coords import DisplayMetrics
 from gui_paint_modules.input.router import InputRouter, is_interactive
@@ -39,38 +39,6 @@ class _Probe(Node):
         self.press_states.append(pressed)
 
 
-class _Event:
-    """Stand-in carrying the fields the normalizer reads, like check_events."""
-
-    def __init__(self, type, value="NOTHING", x=0.0, y=0.0):
-        self.type = type
-        self.value = value
-        self.mouse_x = x
-        self.mouse_y = y
-        self.mouse_region_x = -1
-        self.mouse_region_y = -1
-
-
-class _Surface:
-    """Stand-in for a surface: a solved scene, a fixed region and a redraw counter.
-
-    ``window_rect`` returns the region in window pixels with the origin at (0, 0), so a
-    window point equals the region-local point and the checks read plainly.
-    """
-
-    def __init__(self, scene):
-        self.scene = scene
-        self.redraws = 0
-
-    def window_rect(self):
-        """The surface's region in window pixels, matching the scene's 200x200 box."""
-        return (0.0, 0.0, 200.0, 200.0)
-
-    def _tag_redraw(self):
-        """Count one repaint request from the router."""
-        self.redraws += 1
-
-
 def _stage():
     """Build a solved surface whose single probe sits at (0, 0, 20, 20)."""
     root = Node()
@@ -78,7 +46,7 @@ def _stage():
     root.add(probe)
     scene = Scene(root)
     scene.reflow(BOX, METRICS)
-    return _Surface(scene), probe
+    return StubSurface(scene), probe
 
 
 banner()
@@ -115,7 +83,7 @@ check("unregister removes the surface", router.surfaces == (surface_b,))
 surface, probe = _stage()
 router = InputRouter()
 router.register(surface)
-consumed = router.handle(_Event("SPACE", "PRESS"))
+consumed = router.handle(StubEvent("SPACE", "PRESS"))
 check("a keyboard event is not consumed", consumed is False)
 check("a keyboard event changes no state",
       probe.hover_states == [] and probe.press_states == [] and surface.redraws == 0,
@@ -123,41 +91,41 @@ check("a keyboard event changes no state",
 
 # -- hover ------------------------------------------------------------------
 
-consumed = router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+consumed = router.handle(StubEvent("MOUSEMOVE", x=10.0, y=10.0))
 check("a move over the probe is consumed", consumed is True)
 check("a move sets hover once", probe.hover_states == [True], str(probe.hover_states))
 check("a move tags one redraw", surface.redraws == 1, str(surface.redraws))
 
-consumed = router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+consumed = router.handle(StubEvent("MOUSEMOVE", x=10.0, y=10.0))
 check("a repeated move is consumed again", consumed is True)
 check("a repeated move does not re-notify hover", probe.hover_states == [True], str(probe.hover_states))
 check("a repeated move does not tag another redraw", surface.redraws == 1, str(surface.redraws))
 
-consumed = router.handle(_Event("MOUSEMOVE", x=150.0, y=150.0))
+consumed = router.handle(StubEvent("MOUSEMOVE", x=150.0, y=150.0))
 check("a move over empty space is not consumed", consumed is False)
 check("a move over empty space clears hover", probe.hover_states == [True, False], str(probe.hover_states))
 check("a move over empty space tags one redraw", surface.redraws == 2, str(surface.redraws))
 
 # -- press and release ------------------------------------------------------
 
-consumed = router.handle(_Event("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
+consumed = router.handle(StubEvent("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
 check("a press on the probe is consumed", consumed is True)
 check("a press marks the node pressed", probe.press_states == [True], str(probe.press_states))
 
-consumed = router.handle(_Event("LEFTMOUSE", "RELEASE", x=10.0, y=10.0))
+consumed = router.handle(StubEvent("LEFTMOUSE", "RELEASE", x=10.0, y=10.0))
 check("a release is consumed", consumed is True)
 check("a release fires on_click once", probe.clicks == 1, str(probe.clicks))
 check("a release clears the pressed state", probe.press_states == [True, False], str(probe.press_states))
 
-consumed = router.handle(_Event("LEFTMOUSE", "RELEASE", x=10.0, y=10.0))
+consumed = router.handle(StubEvent("LEFTMOUSE", "RELEASE", x=10.0, y=10.0))
 check("a release with no press is not consumed", consumed is False)
 check("a release with no press does not fire", probe.clicks == 1, str(probe.clicks))
 
 # -- a drag that leaves the node cancels ------------------------------------
 
-router.handle(_Event("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
-router.handle(_Event("MOUSEMOVE", x=150.0, y=150.0))
-consumed = router.handle(_Event("LEFTMOUSE", "RELEASE", x=150.0, y=150.0))
+router.handle(StubEvent("LEFTMOUSE", "PRESS", x=10.0, y=10.0))
+router.handle(StubEvent("MOUSEMOVE", x=150.0, y=150.0))
+consumed = router.handle(StubEvent("LEFTMOUSE", "RELEASE", x=150.0, y=150.0))
 check("a drag out and release is consumed", consumed is True)
 check("a drag out and release does not fire", probe.clicks == 1, str(probe.clicks))
 check("a drag out and release clears the pressed state",
@@ -165,21 +133,21 @@ check("a drag out and release clears the pressed state",
 
 # -- a press on empty space arms nothing ------------------------------------
 
-consumed = router.handle(_Event("LEFTMOUSE", "PRESS", x=150.0, y=150.0))
+consumed = router.handle(StubEvent("LEFTMOUSE", "PRESS", x=150.0, y=150.0))
 check("a press on empty space is not consumed", consumed is False)
-consumed = router.handle(_Event("LEFTMOUSE", "RELEASE", x=150.0, y=150.0))
+consumed = router.handle(StubEvent("LEFTMOUSE", "RELEASE", x=150.0, y=150.0))
 check("a press on empty space arms no gesture", consumed is False)
 
 # -- no surface, and unregister while hot -----------------------------------
 
 barren = InputRouter()
-consumed = barren.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+consumed = barren.handle(StubEvent("MOUSEMOVE", x=10.0, y=10.0))
 check("a move with no surface registered is not consumed", consumed is False)
 
 surface, probe = _stage()
 router = InputRouter()
 router.register(surface)
-router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+router.handle(StubEvent("MOUSEMOVE", x=10.0, y=10.0))
 check("the probe is hot before unregister", probe.hover_states == [True], str(probe.hover_states))
 router.unregister(surface)
 check("unregistering the hot surface clears its hover",
@@ -192,7 +160,7 @@ newer, newer_probe = _stage()
 router = InputRouter()
 router.register(older)
 router.register(newer)
-consumed = router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+consumed = router.handle(StubEvent("MOUSEMOVE", x=10.0, y=10.0))
 check("the default target is the newest surface",
       consumed is True and newer_probe.hover_states == [True], str(newer_probe.hover_states))
 check("the older surface is left untouched", older_probe.hover_states == [], str(older_probe.hover_states))
@@ -203,10 +171,10 @@ offset_surface, offset_probe = _stage()
 offset_surface.window_rect = lambda: (1000.0, 500.0, 200.0, 200.0)
 router = InputRouter()
 router.register(offset_surface)
-consumed = router.handle(_Event("MOUSEMOVE", x=1010.0, y=510.0))
+consumed = router.handle(StubEvent("MOUSEMOVE", x=1010.0, y=510.0))
 check("a window point inside the region is converted and consumed", consumed is True)
 check("the converted point sets hover", offset_probe.hover_states == [True], str(offset_probe.hover_states))
-consumed = router.handle(_Event("MOUSEMOVE", x=10.0, y=10.0))
+consumed = router.handle(StubEvent("MOUSEMOVE", x=10.0, y=10.0))
 check("a window point outside the region passes through", consumed is False)
 check("an outside window point clears the hover", offset_probe.hover_states == [True, False],
       str(offset_probe.hover_states))
@@ -216,23 +184,13 @@ check("an outside window point clears the hover", offset_probe.hover_states == [
 import gui_paint_modules.input.router as router_module
 
 
-class _Window:
-    """Stand-in for a Blender window: an identity for the router registry."""
-
-    def __init__(self, pointer):
-        self._pointer = pointer
-
-    def as_pointer(self):
-        return self._pointer
-
-
 saved_launch = router_module._launch_modal
 router_module._ROUTERS.clear()
 router_module._MODALS.clear()
 router_module._launch_modal = lambda router: None
 try:
-    window_a = _Window(5001)
-    window_b = _Window(5002)
+    window_a = StubWindow(5001)
+    window_b = StubWindow(5002)
     first = router_module.router_for(window_a)
     check("router_for builds a router on first ask", isinstance(first, InputRouter))
     check("router_for is stable for one window", router_module.router_for(window_a) is first)
