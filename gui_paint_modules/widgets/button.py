@@ -28,9 +28,30 @@ class Button(Node):
         super().__init__(size=size, **kw)
         self.label = label
         self.icon = icon
+        # Not layout-relevant: the handler and the interaction flags never change a size.
         self.on_click = on_click
         self._hot = False
         self._pressed = False
+
+    @property
+    def label(self):
+        """The button's caption. It is measured, so changing it re-solves the layout."""
+        return self._label
+
+    @label.setter
+    def label(self, value):
+        self._label = str(value)
+        self.mark_dirty()
+
+    @property
+    def icon(self):
+        """The button's icon, or None. It adds to the measured width, so it re-solves."""
+        return self._icon
+
+    @icon.setter
+    def icon(self, value):
+        self._icon = value
+        self.mark_dirty()
 
     def measure(self, metrics):
         """Return the label plus the icon, with padding, as (width, height) in pixels."""

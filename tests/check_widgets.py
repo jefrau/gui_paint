@@ -170,4 +170,55 @@ if isinstance(Panel, type) and callable(measure):
           len(rounds) == 1 and tuple(rounds[0][3:5]) == (16.0, 28.0), str(rounds))
 
 
+# -- widget content is layout-relevant, so it must invalidate the solve ------
+
+if isinstance(Label, type) and isinstance(Button, type):
+    root = Node()
+    label = Label("Ab", size=10.0)
+    root.add(label)
+    scene = Scene(root)
+    scene.reflow(BOX, METRICS)
+    plain_width = label.rect[2]
+
+    label.text = "AbAbAbAb"
+    scene.reflow(BOX, METRICS)
+    check("changing a Label's text re-solves the layout",
+          label.rect[2] > plain_width, f"{plain_width} -> {label.rect[2]}")
+
+    height_before = label.rect[3]
+    label.font_size = 30.0
+    scene.reflow(BOX, METRICS)
+    check("changing a Label's font size re-solves the layout",
+          label.rect[3] > height_before, f"{height_before} -> {label.rect[3]}")
+
+    root = Node()
+    button = Button(label="Go")
+    root.add(button)
+    scene = Scene(root)
+    scene.reflow(BOX, METRICS)
+    button_width = button.rect[2]
+    button.label = "Go somewhere else"
+    scene.reflow(BOX, METRICS)
+    check("changing a Button's label re-solves the layout",
+          button.rect[2] > button_width, f"{button_width} -> {button.rect[2]}")
+
+    with_icon = button.rect[2]
+    button.icon = Icon.named("select")
+    scene.reflow(BOX, METRICS)
+    check("changing a Button's icon re-solves the layout",
+          button.rect[2] > with_icon, f"{with_icon} -> {button.rect[2]}")
+
+    # A look-only change must NOT invalidate anything: the sentinel rect survives.
+    root = Node()
+    painted = Label("Ab", size=10.0)
+    root.add(painted)
+    scene = Scene(root)
+    scene.reflow(BOX, METRICS)
+    painted._rect = (7.0, 7.0, 7.0, 7.0)
+    painted.color = (0.0, 0.0, 0.0, 1.0)
+    scene.reflow(BOX, METRICS)
+    check("changing a colour does not re-solve the layout",
+          painted.rect == (7.0, 7.0, 7.0, 7.0), repr(painted.rect))
+
+
 finish("widgets")
