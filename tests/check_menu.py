@@ -19,6 +19,34 @@ BOX = (0.0, 0.0, 240.0, 240.0)
 METRICS = DisplayMetrics(1.0, 1.0)
 
 
+def _absolute_rect(node):
+    """A solved node's rectangle in absolute scene pixels."""
+    x, y = node_origin(node)
+    return (x, y, x + node.rect[2], y + node.rect[3])
+
+
+def _within(inner, outer):
+    """Whether a node's absolute rectangle lies inside another's."""
+    ix0, iy0, ix1, iy1 = _absolute_rect(inner)
+    ox0, oy0, ox1, oy1 = _absolute_rect(outer)
+    return ox0 <= ix0 and oy0 <= iy0 and ix1 <= ox1 and iy1 <= oy1
+
+
+def _shade(item):
+    """Draw a row into a recorder canvas and return its background colour.
+
+    The recorded call is unpacked by name, so a change to ``rounded_rect``'s arity
+    raises here instead of silently reading the wrong argument.
+    """
+    canvas = RecorderCanvas()
+    item.draw(canvas)
+    for name, *args in canvas.calls:
+        if name == "rounded_rect":
+            _x, _y, _width, _height, _radius, colour = args
+            return colour
+    return None
+
+
 try:
     from gui_paint_modules.widgets import Menu, MenuItem
 except Exception as exc:
@@ -42,10 +70,9 @@ if isinstance(Menu, type) and isinstance(MenuItem, type):
     scene.reflow(BOX, METRICS)
 
     check("the menu layer spans the region", menu.rect == BOX, str(menu.rect))
-    check("the popup sits inside the layer",
-          menu.popup.rect[0] >= 0.0 and menu.popup.rect[1] >= 0.0, str(menu.popup.rect))
+    check("the popup sits inside the layer", _within(menu.popup, menu), str(menu.popup.rect))
     check("both items sit inside the popup",
-          first.rect[2] <= menu.popup.rect[2] and second.rect[2] <= menu.popup.rect[2],
+          _within(first, menu.popup) and _within(second, menu.popup),
           f"{first.rect} {second.rect} in {menu.popup.rect}")
 
     # -- hit-testing: item, popup background, layer --------------------------
@@ -97,11 +124,25 @@ if isinstance(Menu, type) and isinstance(MenuItem, type):
 
     # -- look ----------------------------------------------------------------
 
+    idle = _shade(first)
+    check("a row draws a background", idle is not None, str(idle))
+    first.set_hover(True)
+    hover = _shade(first)
+    check("hover changes the row's shade", hover != idle, f"{hover} vs {idle}")
+    first.set_pressed(True)
+    pressed = _shade(first)
+    check("pressing the row changes the shade again",
+          pressed not in (idle, hover), str(pressed))
+    first.set_hover(False)
+    first.set_pressed(False)
+    check("releasing restores the row's idle shade", _shade(first) == idle)
+
     recorder = RecorderCanvas()
     scene.draw(recorder)
     rounds = [call for call in recorder.calls if call[0] == "rounded_rect"]
     labels = [call for call in recorder.calls if call[0] == "text"]
-    check("the popup and its rows draw rounded backgrounds", len(rounds) >= 3, str(len(rounds)))
+    check("the popup and its two rows draw exactly one background each",
+          len(rounds) == 3, str(len(rounds)))
     check("both rows draw their labels",
           [call[3] for call in labels] == ["First", "Second"], str(labels))
 
