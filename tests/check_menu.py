@@ -10,7 +10,7 @@ from checkkit import RecorderCanvas, banner, check, finish, node_center, node_or
 
 from gui_paint_modules.coords import DisplayMetrics
 from gui_paint_modules.input.router import is_interactive
-from gui_paint_modules.layout import Anchor
+from gui_paint_modules.layout import Anchor, HBox, VBox
 from gui_paint_modules.scene import Scene
 
 banner()
@@ -79,6 +79,21 @@ if isinstance(Menu, type) and isinstance(MenuItem, type):
     bare = Menu()
     bare.on_click()
     check("a menu with no dismiss hook is tolerated", True)
+
+    # -- layout: the layer's own and the popup's are separate parameters -----
+
+    layer_layout = VBox(gap=3.0)
+    layered = Menu(items=[], layout=layer_layout)
+    check("Menu keeps Node.layout for the layer itself",
+          layered.layout is layer_layout, str(layered.layout))
+
+    popup_layout = HBox(gap=5.0)
+    try:
+        nested = Menu(items=[], popup_layout=popup_layout)
+        reached = nested.popup.layout is popup_layout
+    except Exception:
+        reached = False
+    check("popup_layout sets the popup's layout", reached is True)
 
     # -- look ----------------------------------------------------------------
 

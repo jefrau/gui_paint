@@ -54,16 +54,21 @@ class Menu(Node):
     The layer spans the region it is solved in, so any click is caught. The popup is an
     anchored ``Panel`` holding the items; ``on_dismiss`` is called when the layer is
     clicked outside the popup and after an item is selected. Set ``on_dismiss`` to the
-    surface's ``disable`` and the menu closes itself.
+    surface's ``disable`` and the menu closes itself. ``popup_anchor`` and ``popup_layout``
+    configure the popup; the layer's own ``layout`` comes through the ``Node`` keywords.
     """
 
-    def __init__(self, items=(), popup_anchor=None, on_dismiss=None, layout=None, **kw):
+    def __init__(self, items=(), popup_anchor=None, popup_layout=None,
+                 on_dismiss=None, **kw):
         super().__init__(**kw)
+        # Two layouts are in play: the layer's own comes through ``**kw`` to Node, and the
+        # popup's is this parameter. Keeping the names apart is what stops one from
+        # silently standing in for the other.
         # The dismiss hook is a plain attribute: the host wires it after construction,
         # because the surface it closes does not exist yet while the menu is built.
         self.on_dismiss = on_dismiss
         self.popup = _MenuPopup(
-            layout=VBox(gap=1.0, padding=4.0) if layout is None else layout,
+            layout=VBox(gap=1.0, padding=4.0) if popup_layout is None else popup_layout,
             anchor=Anchor.top_left(margin=6.0) if popup_anchor is None else popup_anchor,
         )
         self.add(self.popup)
