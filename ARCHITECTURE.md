@@ -335,7 +335,8 @@ The only care is sizing, which goes through the DPI helper (see Coordinate contr
 
 Parts of the sketch above are targets rather than state: `rect`, the transform stack, the
 clip stack, `rounded_rect`, `circle` and `text` exist today, while `line`, `dashed_line`
-and `image` are still to come. Note that a line has no shader to draw it —
+and `image` are still to come — deferred until a caller needs them. Note that a line has no
+shader to draw it —
 `LINE_UNIFORM_COLOR` does not resolve on 5.2, which `tests/check_draw_api.py` pins — so it
 will be tessellated into triangles when a caller needs it, not drawn by a line shader.
 
@@ -720,11 +721,23 @@ stable node `id` is not added until the loader needs one.
 | Draw with one shader per kind, bound once per batch group. | Minimizes state changes. |
 | Tag redraw on state change, not on a fast timer. | Idle UI should cost nothing. |
 | Use a slow timer only for content that genuinely animates. | Animations are the exception, not the baseline. |
-| Cull nodes outside the region. | Large trees stay cheap. |
+| Cull nodes outside the region. **Deferred** — see below. | Large trees stay cheap. |
 
 The draw callback runs on *every* redraw of the region, including redraws Blender
 triggers for its own reasons. It must be fast and must never do file I/O, allocations
 in the hot path, or shader creation.
+
+Most of these rules are behavioural, so they are pinned by checks rather than by timing:
+`tests/check_performance.py` asserts the draw walk is deterministic and read-only over the
+solve, that it re-sorts nothing and calls no `measure`, and that an idle `reflow` re-solves
+nothing; `tests/check_widgets.py` asserts a draw pass reads no font metric; and the batch
+cache is exercised by `tests/check_canvas.py`.
+
+**Deferred: region culling.** The rule is not implemented. Pruning a subtree needs that
+subtree's bounds, which the solve does not produce yet, and a node's own rectangle is not
+enough: a non-clipped container can hold a child that overflows into the region, so culling
+by the container's rect would drop a visible child. It waits until a real tree is large
+enough for the win to pay for that solved state.
 
 ---
 
@@ -766,6 +779,10 @@ All version-dependent behavior lives in `compat.py`:
 Rule: no version comparison outside `compat.py`, and prefer a capability check
 (`hasattr`, a probe) over comparing numbers when the difference can be detected
 directly. The rest of the codebase should read as if there were only one version.
+
+`tests/check_compat.py` enforces the first half of that rule: it fails if any module outside
+`compat.py` reads `bpy.app.version*` or `bpy.app.build_*`, or reaches the 5.2-only
+`gpu.init` capability, which belongs to the shim alone.
 
 ---
 
