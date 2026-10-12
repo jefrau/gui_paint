@@ -104,8 +104,12 @@ if isinstance(Menu, type) and isinstance(MenuItem, type):
     check("selecting an action-less item still dismisses", len(dismissed) == 3, str(dismissed))
 
     bare = Menu()
-    bare.on_click()
-    check("a menu with no dismiss hook is tolerated", True)
+    try:
+        bare.on_click()
+        tolerated = True
+    except Exception:
+        tolerated = False
+    check("a menu with no dismiss hook is tolerated", tolerated is True)
 
     # -- layout: the layer's own and the popup's are separate parameters -----
 
