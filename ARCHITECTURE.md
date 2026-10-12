@@ -479,7 +479,7 @@ scene = Scene(root=Panel(
     ],
 ))
 
-dock = Surface(space_type="VIEW_3D", region_type="WINDOW", interactive=True)
+dock = Surface(space_type="SpaceView3D", region_type="WINDOW", interactive=True)
 dock.scene = scene
 dock.enable(bpy.context.area)
 ```
