@@ -8,19 +8,10 @@ finishes.
 
 import bpy
 
-from checkkit import StubArea, StubSpace, StubWindow, banner, check, finish
+from checkkit import StubArea, StubContext, StubSpace, StubWindow, banner, check, finish
 
 from gui_paint_modules.canvas import Canvas
 from gui_paint_modules.surface import Surface
-
-
-class _Context:
-    """Stands in for bpy.context, so the draw callback sees a chosen area and window."""
-
-    def __init__(self, area, window=None):
-        self.area = area
-        self.window = window
-
 
 banner()
 
@@ -31,7 +22,7 @@ for method in ("enable", "disable", "owns"):
 recorder = StubSpace()
 original_space = getattr(bpy.types, "SpaceView3D", None)
 original_context = bpy.context
-context = _Context(None)
+context = StubContext(None)
 bpy.types.SpaceView3D = recorder
 bpy.context = context
 try:

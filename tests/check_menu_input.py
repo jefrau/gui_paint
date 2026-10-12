@@ -9,8 +9,8 @@ does.
 import bpy
 
 from checkkit import (
-    StubArea, StubEvent, StubSpace, StubSurface, StubWindow, banner, check, finish,
-    node_center,
+    StubArea, StubContext, StubEvent, StubSpace, StubSurface, StubWindow, banner, check,
+    finish, node_center,
 )
 
 from gui_paint_modules.coords import DisplayMetrics
@@ -25,14 +25,6 @@ banner()
 
 BOX = (0.0, 0.0, 200.0, 200.0)
 METRICS = DisplayMetrics(1.0, 1.0)
-
-
-class _Context:
-    """Stands in for bpy.context, so a surface sees a chosen area and window."""
-
-    def __init__(self, area, window=None):
-        self.area = area
-        self.window = window
 
 
 def _solved(root):
@@ -117,7 +109,7 @@ if has_seam:
 
     original_space = getattr(bpy.types, "SpaceView3D", None)
     original_context = bpy.context
-    context = _Context(None)
+    context = StubContext(None)
     bpy.types.SpaceView3D = StubSpace()
     bpy.context = context
     try:

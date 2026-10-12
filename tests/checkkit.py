@@ -140,6 +140,18 @@ class StubWindow:
         return self._pointer
 
 
+class StubContext:
+    """Stand-in for bpy.context, so a surface sees a chosen area and window.
+
+    A check that exercises `Surface.enable`/`disable` swaps `bpy.context` for this, so the
+    draw callback resolves the area it was bound to and the router resolves a window.
+    """
+
+    def __init__(self, area, window=None):
+        self.area = area
+        self.window = window
+
+
 def node_origin(node) -> tuple:
     """The absolute origin of a solved node's rectangle, in the scene's pixel space.
 
