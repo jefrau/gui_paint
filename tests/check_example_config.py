@@ -51,6 +51,14 @@ if config is not None:
     check("the default config is valid and non-empty",
           isinstance(default, ToolbarConfig) and len(default.buttons) > 0)
 
+    unresolved = []
+    for tool in default.buttons:
+        try:
+            tool.resolve()
+        except Exception as exc:
+            unresolved.append(f"{tool.label}: {exc}")
+    check("every default tool names a real operator", not unresolved, str(unresolved))
+
     reloaded = ToolbarConfig.from_json(default.to_json())
     check("a config round-trips through JSON unchanged",
           reloaded.to_dict() == default.to_dict(), reloaded.to_json())

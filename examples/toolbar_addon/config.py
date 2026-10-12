@@ -7,6 +7,10 @@ copied to another PC or pasted into a forum.
 
 This module is the data layer only. It registers no `bpy` class and imports the library
 nowhere, so the addon can build its Scene from a config without this layer knowing about it.
+
+A tool must name an operator that **runs to completion on its own**. Interactive operators
+(``transform.translate``, ``rotate``, ``scale``) need mouse input, so a toolbar button cannot
+finish them; a config that names one loads fine but the button will appear to do nothing.
 """
 
 import json
@@ -138,10 +142,15 @@ class ToolbarConfig:
 
 
 def default_config():
-    """The toolbar that ships with the example: a few viewport tools."""
+    """The toolbar that ships with the example: immediate, safe viewport tools.
+
+    Every tool names a Blender operator that finishes on its own. Interactive operators
+    (``transform.translate`` and friends) are deliberately absent: they need mouse input, so
+    a toolbar button cannot complete them.
+    """
     return ToolbarConfig("Default viewport tools", [
         ToolButton("Select All", "object.select_all", icon="select", params={"action": "SELECT"}),
         ToolButton("Deselect All", "object.select_all", icon="select", params={"action": "DESELECT"}),
-        ToolButton("Grab", "transform.translate", icon="grab"),
-        ToolButton("Move X +1", "transform.translate", icon="move", params={"value": [1.0, 0.0, 0.0]}),
+        ToolButton("Edit Mode", "object.mode_set", icon="grab", params={"mode": "EDIT"}),
+        ToolButton("Shade Smooth", "object.shade_smooth", icon="move"),
     ])

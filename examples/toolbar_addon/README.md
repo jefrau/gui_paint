@@ -50,7 +50,8 @@ It looks like this:
   "buttons": [
     { "label": "Select All", "op": "object.select_all", "icon": "select",
       "params": { "action": "SELECT" } },
-    { "label": "Grab", "op": "transform.translate", "icon": "grab" }
+    { "label": "Edit Mode", "op": "object.mode_set", "icon": "grab",
+      "params": { "mode": "EDIT" } }
   ]
 }
 ```
@@ -63,6 +64,17 @@ It looks like this:
 
 Edit the file by hand and click **Reload toolbar**, or use **Import** / **Export** to move it
 between machines.
+
+### Choosing a tool's operator
+
+A tool runs its operator the moment you click it, so the operator must **finish on its own**.
+`object.select_all`, `object.mode_set` and `object.shade_smooth` do; an **interactive**
+operator such as `transform.translate` (Grab), `transform.rotate` or `transform.scale` waits
+for mouse input, so a toolbar button cannot complete it and the click looks like it did
+nothing. Give a transform operator an explicit value only if you know it runs
+non-interactively in your context; otherwise leave it out of a toolbar.
+
+The shipped default tools are all immediate, and the config check asserts they resolve.
 
 ## A word on safety
 
