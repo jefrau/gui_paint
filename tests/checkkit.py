@@ -140,6 +140,32 @@ class StubWindow:
         return self._pointer
 
 
+def node_origin(node) -> tuple:
+    """The absolute origin of a solved node's rectangle, in the scene's pixel space.
+
+    `Scene` solves rectangles relative to the parent's content box and keeps no absolute
+    rect, so a check that needs a real point walks the parent chain the same way the hit
+    walk does. Duck-typed on purpose, so this module imports no library code.
+    """
+    x = y = 0.0
+    current = node
+    while True:
+        x += current.rect[0]
+        y += current.rect[1]
+        parent = current._parent
+        if parent is None:
+            return (x, y)
+        x += parent._padding
+        y += parent._padding
+        current = parent
+
+
+def node_center(node) -> tuple:
+    """The absolute centre of a solved node, for a point inside it."""
+    x, y = node_origin(node)
+    return (x + node.rect[2] / 2.0, y + node.rect[3] / 2.0)
+
+
 def raises_value_error(call) -> bool:
     """Whether a zero-argument call raises ValueError, and nothing else.
 

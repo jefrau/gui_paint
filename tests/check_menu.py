@@ -6,7 +6,7 @@ so no surface or window is needed either; the router integration lives in
 `check_menu_input.py`.
 """
 
-from checkkit import RecorderCanvas, banner, check, finish
+from checkkit import RecorderCanvas, banner, check, finish, node_center, node_origin
 
 from gui_paint_modules.coords import DisplayMetrics
 from gui_paint_modules.input.router import is_interactive
@@ -17,32 +17,6 @@ banner()
 
 BOX = (0.0, 0.0, 240.0, 240.0)
 METRICS = DisplayMetrics(1.0, 1.0)
-
-
-def _absolute(node):
-    """The absolute origin of a solved node, walking the parent chain.
-
-    ``Scene`` solves rectangles relative to the parent's content box and keeps no
-    absolute rect, so a check that needs a real point computes it the same way the
-    hit walk does.
-    """
-    x = y = 0.0
-    child = node
-    while True:
-        x += child.rect[0]
-        y += child.rect[1]
-        parent = child._parent
-        if parent is None:
-            return (x, y)
-        x += parent._padding
-        y += parent._padding
-        child = parent
-
-
-def _center(node):
-    """A point in the middle of a solved node's absolute rectangle."""
-    x, y = _absolute(node)
-    return (x + node.rect[2] / 2.0, y + node.rect[3] / 2.0)
 
 
 try:
@@ -76,10 +50,10 @@ if isinstance(Menu, type) and isinstance(MenuItem, type):
 
     # -- hit-testing: item, popup background, layer --------------------------
 
-    hit = scene.hit_test(*_center(first))
+    hit = scene.hit_test(*node_center(first))
     check("an item centre hit-tests to that item", hit is first, str(hit))
 
-    popup_x, popup_y = _absolute(menu.popup)
+    popup_x, popup_y = node_origin(menu.popup)
     hit = scene.hit_test(popup_x + 1.0, popup_y + 1.0)
     check("the popup background hit-tests to the popup", hit is menu.popup, str(hit))
 

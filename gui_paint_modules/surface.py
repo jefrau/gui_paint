@@ -6,6 +6,10 @@ nothing stays registered or live. An interactive surface also registers with the
 window's router, which stands the input modal up on the first one and takes it
 down on the last, so one window runs one router no matter how many surfaces it has.
 
+``open_menu`` opens a transient menu over the surface's own area: the menu is another
+interactive surface, so the same router and the same modal serve it, and it becomes the
+newest surface in the window and takes the pointer until it closes.
+
 Both ends ask the bound area to repaint. A draw handler only runs when Blender
 repaints the region, so without that request an enabled overlay can stay invisible
 until an unrelated redraw happens to occur.
@@ -37,6 +41,7 @@ class Surface:
         self._handle = None
         self._area = None
         self._area_ptr = None
+        self._menu = None
 
     def enable(self, area):
         """Register drawing for this surface. Does nothing if already enabled."""
@@ -60,6 +65,7 @@ class Surface:
         """Remove drawing and input. The surface becomes invisible and inert."""
         if self._handle is None:
             return
+        self._close_menu()
         space = getattr(bpy.types, self.space_type)
         space.draw_handler_remove(self._handle, self.region_type)
         self._handle = None
@@ -69,6 +75,40 @@ class Surface:
         self._area_ptr = None
         self._tag_redraw()
         self._area = None
+
+    def open_menu(self, menu):
+        """Open a transient menu layer over this surface's area.
+
+        The menu takes input while it is open: it is the newest interactive surface in
+        the window, so the shared router locates it before this one, and its full-region
+        layer is what catches a click outside the popup. ``menu.on_dismiss`` is wired to
+        close the menu's surface, and a menu this surface opened before is closed first.
+        Returns the live menu surface.
+        """
+        if self._handle is None or self._area is None:
+            raise RuntimeError("cannot open a menu from a disabled surface")
+        self._close_menu()
+        surface = Surface(self.space_type, self.region_type, interactive=True)
+        menu.on_dismiss = surface.disable
+        surface.scene = Scene(root=menu)
+        surface.enable(self._area)
+        self._menu = surface
+        return surface
+
+    def _close_menu(self):
+        """Close the menu this surface opened, if it is still live.
+
+        Called when a new menu replaces it and when this surface is disabled, so a
+        surface never leaves a disappeared menu behind.
+        """
+        surface = self._menu
+        if surface is None:
+            return
+        self._menu = None
+        menu = surface.scene.root
+        if menu is not None:
+            menu.on_dismiss = None
+        surface.disable()
 
     def owns(self, area):
         """Whether this surface draws in the given area."""
