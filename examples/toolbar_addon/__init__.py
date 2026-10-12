@@ -70,12 +70,43 @@ def _icon(tool):
     return Icon.named(tool.icon) if tool.icon else None
 
 
+def _overrides():
+    """A 3D-viewport context, so an operator runs there instead of in the router's modal.
+
+    A library button calls back from inside the input router's window-level modal, which has
+    no area and no region, so an operator such as ``object.select_all`` fails its poll with
+    "context is incorrect". Overriding the context with the viewport the toolbar is armed in
+    is what lets the operator run. Measured: ``bpy.context.temp_override`` accepts
+    ``window``/``area``/``region``/``space_data`` on both 4.2 and 5.2.
+    """
+    overrides = {}
+    window = bpy.context.window
+    if window is not None:
+        overrides["window"] = window
+    area = _STATE.get("area")
+    if area is not None:
+        try:
+            region = next((item for item in area.regions if item.type == "WINDOW"), None)
+            overrides["area"] = area
+            overrides["space_data"] = area.spaces.active
+            if region is not None:
+                overrides["region"] = region
+        except ReferenceError:
+            pass  # the area was closed; run with whatever context is left
+    return overrides
+
+
 def _runner(tool):
-    """A click handler that runs the tool's operator, reporting failures instead of raising."""
+    """A click handler that runs the tool's operator in the viewport context.
+
+    A failure is reported, not raised: an operator whose poll still refuses (no active
+    object, wrong mode) must not take the UI down.
+    """
     def run():
         try:
-            tool.invoke()
-        except Exception as exc:  # an operator can refuse a context; do not take the UI down
+            with bpy.context.temp_override(**_overrides()):
+                tool.invoke()
+        except Exception as exc:
             print(f"toolbar example: {tool.label!r}: {type(exc).__name__}: {exc}")
     return run
 

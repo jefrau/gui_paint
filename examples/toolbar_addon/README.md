@@ -76,6 +76,15 @@ non-interactively in your context; otherwise leave it out of a toolbar.
 
 The shipped default tools are all immediate, and the config check asserts they resolve.
 
+### Running the tool: the context override
+
+The library calls a button's handler from inside its input router's **window-level modal**,
+which has no area and no region. An operator that needs a 3D view — nearly every `object.*`
+op — then fails its poll with *"context is incorrect"*. The example runs each tool inside a
+`bpy.context.temp_override(window, area, region, space_data)` that points at the viewport the
+toolbar is armed in, which is what makes the operator run. Any host that runs operators from a
+library button needs this; a tool that only changes the config does not.
+
 ## A word on safety
 
 A config file can name any operator, so **a config you did not write is code you chose to

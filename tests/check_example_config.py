@@ -94,7 +94,7 @@ if config is not None:
     # -- the addon module: import-safe, and its shape ------------------------
 
     try:
-        from examples.toolbar_addon import bl_info, build_scene, register, unregister
+        from examples.toolbar_addon import _overrides, bl_info, build_scene, register, unregister
     except Exception as exc:
         check("the addon module imports", False, f"{type(exc).__name__}: {exc}")
     else:
@@ -103,6 +103,9 @@ if config is not None:
         check("register and unregister are callable",
               callable(register) and callable(unregister))
         check("importing the addon registers nothing", "toolbar" not in dir(bpy.ops))
+        check("the addon can build a viewport context override",
+              callable(_overrides) and hasattr(bpy.context, "temp_override"))
+        check("the override is a mapping", isinstance(_overrides(), dict))
 
         scene = build_scene(default)
         panel = scene.root.children[0] if scene.root is not None and scene.root.children else None

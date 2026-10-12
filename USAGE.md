@@ -144,6 +144,11 @@ the events. An event goes to the newest surface whose region holds the pointer. 
 is not a left-button press/release or a mouse move — the keyboard included — passes straight
 through, so Blender keeps working. You never import the input layer; it is wired by `Surface`.
 
+A button's handler runs inside the router's modal, which has **no area and no region**, so a
+bare `bpy.ops` call that needs a 3D view fails its poll (*"context is incorrect"*). To run an
+operator from a button, wrap it in a context override that points at the surface's area — the
+toolbar example in `examples/toolbar_addon/` shows the shape.
+
 ## Menus
 
 A menu is a transient popup a surface opens over its own area. While it is open it owns the
