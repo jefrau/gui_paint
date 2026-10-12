@@ -108,8 +108,10 @@ gui_paint_modules/
     compat.py            Version-gated shims (4.2 vs 4.5+ vs 5.x)
 ```
 
-The `input/` package (router and events) exists as of M4; `widgets/menu.py`,
+The `input/` package (router and events) exists as of M4 and `widgets/menu.py` as of M5;
 `widgets/scroll.py`, `icons/atlas.py`, `spec.py` and `spec_json.py` are still targets.
+The `Spec` and the JSON loader are deliberately deferred until there is a concrete need to
+save or hand-edit layouts (see the authoring section).
 
 Design rule: lower layers (**canvas**, **coords**, **shaders**, **layout**, **nodes**,
 **scene**) must not import higher layers. The dependency direction is always outward-in.
@@ -263,7 +265,9 @@ survives area splits, joins and fullscreen toggles.
 Parts of the sketch above are targets rather than state: `Scene` arrived with M2 and the
 input router with M4, so the sketch now matches the code. An interactive surface registers
 with the router of the window it was enabled in; that router arms the modal on the first
-surface and takes it down on the last one.
+surface and takes it down on the last one. `Surface.open_menu` (M5) opens a transient menu
+over the surface's own area — another interactive surface, the newest in the window, which
+the shared router locates first until it closes (see "Menus").
 
 ---
 
@@ -592,9 +596,16 @@ class InputRouter:
 
 ### Menus
 
-A menu is a transient interactive scene. Opening it arms the router; while open it owns
-input, including clicks outside its rectangle (which close it). Closing restores the
-previous surface. Same router, different lifetime — no second mechanism.
+A menu is a transient interactive scene. `widgets/menu.py`'s `Menu` is a node whose
+rectangle spans the whole region, with the popup — an anchored panel of `MenuItem`s —
+inside it. Opening it is what `Surface.open_menu(menu)` does: it enables a new interactive
+surface over the same area, so the menu is the newest surface in the window and the shared
+router locates it first. A click on a row runs the row's action and dismisses; a click on
+the popup's own background is consumed and does nothing; a click anywhere else hits the
+layer and dismisses, and that click is consumed. Closing disables the menu surface, so the
+surface underneath takes the pointer again. Same router, same modal, different lifetime —
+no second mechanism. Selecting a row closes the menu, and there is no keyboard or ESC
+handling: D4 keeps the library to labels, so a menu never takes focus.
 
 ---
 
@@ -694,6 +705,10 @@ Start with the Node API only. Add the JSON loader (and the `Spec` it needs) once
 is a concrete need to save or hand-edit layouts. Building both at once is premature; the
 Node API will shape the model anyway.
 
+Taken (2026-10-12): M5 shipped the menu and left the `Spec` and the JSON loader for later.
+If a saved layout identifies a node, it does so by its child-index path from the root; a
+stable node `id` is not added until the loader needs one.
+
 ---
 
 ## Performance and redraw
@@ -782,7 +797,7 @@ Each milestone is independently useful and testable.
 | M2 | Scene + layout + hit-test | A parent panel with anchored and stacked children. |
 | M3 | Widgets + icons | A clickable toolbar with labels and vector icons. |
 | M4 | Input router | Hover and click reaching the right node; pass-through elsewhere. |
-| M5 | Menus + Spec + JSON loader | A custom menu opened from a button, loadable from data. |
+| M5 | Menus (Spec + JSON loader deferred) | A custom menu opened from a button. |
 | M6 | Compat + performance pass | Works on 4.2 and 5.x; idle UI costs nothing. |
 
 Build M1 first and resist adding widgets before the coordinate contract and the two
@@ -792,8 +807,6 @@ loops are solid. Everything else is easier once those are right.
 
 ## Open questions
 
-- Is a stable node id needed for saved layouts and diffing, or are positional paths
-  enough?
 - Which external icon sheet format to support first (atlas + JSON index is the simplest).
 
 ---
