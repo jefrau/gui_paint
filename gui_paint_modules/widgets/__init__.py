@@ -8,6 +8,7 @@ state.
 
 from .button import Button
 from .label import Label
+from .menu import Menu, MenuItem
 from .panel import Panel
 
-__all__ = ["Button", "Label", "Panel"]
+__all__ = ["Button", "Label", "Menu", "MenuItem", "Panel"]
