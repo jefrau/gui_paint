@@ -50,8 +50,8 @@ It looks like this:
   "buttons": [
     { "label": "Select All", "op": "object.select_all", "icon": "select",
       "params": { "action": "SELECT" } },
-    { "label": "Edit Mode", "op": "object.mode_set", "icon": "grab",
-      "params": { "mode": "EDIT" } }
+    { "label": "Invert Selection", "op": "object.select_all", "icon": "grab",
+      "params": { "action": "INVERT" } }
   ]
 }
 ```
@@ -68,13 +68,17 @@ between machines.
 ### Choosing a tool's operator
 
 A tool runs its operator the moment you click it, so the operator must **finish on its own**.
-`object.select_all`, `object.mode_set` and `object.shade_smooth` do; an **interactive**
-operator such as `transform.translate` (Grab), `transform.rotate` or `transform.scale` waits
-for mouse input, so a toolbar button cannot complete it and the click looks like it did
-nothing. Give a transform operator an explicit value only if you know it runs
-non-interactively in your context; otherwise leave it out of a toolbar.
+`object.select_all` and `object.shade_smooth` do; an **interactive** operator such as
+`transform.translate` (Grab), `transform.rotate` or `transform.scale` waits for mouse input,
+so a toolbar button cannot complete it and the click looks like it did nothing. Give a
+transform operator an explicit value only if you know it runs non-interactively in your
+context; otherwise leave it out of a toolbar.
 
-The shipped default tools are all immediate, and the config check asserts they resolve.
+The operator also has to **apply in the current mode**. An `object.*` operator refuses in Edit
+Mode: `object.select_all` fails its poll with *"context is incorrect"* while you are editing a
+mesh, where you would need `mesh.select_all`. So a toolbar that both flips the mode and runs
+object-mode tools stops working the moment you enter a mode. The shipped default tools all
+apply in object mode, and the config check asserts they resolve.
 
 ### Running the tool: the context override
 

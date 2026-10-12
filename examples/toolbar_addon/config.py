@@ -142,15 +142,16 @@ class ToolbarConfig:
 
 
 def default_config():
-    """The toolbar that ships with the example: immediate, safe viewport tools.
+    """The toolbar that ships with the example: immediate, object-mode viewport tools.
 
-    Every tool names a Blender operator that finishes on its own. Interactive operators
-    (``transform.translate`` and friends) are deliberately absent: they need mouse input, so
-    a toolbar button cannot complete them.
+    Every tool names a Blender operator that finishes on its own and applies in **object
+    mode**. Interactive operators (``transform.translate`` and friends) are deliberately
+    absent — they need mouse input, so a button cannot complete them — and so is anything
+    that changes the mode, because then the other tools would stop applying mid-session.
     """
     return ToolbarConfig("Default viewport tools", [
         ToolButton("Select All", "object.select_all", icon="select", params={"action": "SELECT"}),
         ToolButton("Deselect All", "object.select_all", icon="select", params={"action": "DESELECT"}),
-        ToolButton("Edit Mode", "object.mode_set", icon="grab", params={"mode": "EDIT"}),
+        ToolButton("Invert Selection", "object.select_all", icon="grab", params={"action": "INVERT"}),
         ToolButton("Shade Smooth", "object.shade_smooth", icon="move"),
     ])

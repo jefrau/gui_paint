@@ -229,6 +229,9 @@ class TOOLBAR_OT_reset(bpy.types.Operator):
 
     def execute(self, context):
         _STATE["config"] = toolconfig.default_config()
+        # Persist, or the reset would be lost on the next launch and the file would keep
+        # whatever it had; "reset to default" is meant to stick.
+        _STATE["config"].save(config_path())
         refresh()
         self.report({"INFO"}, "reset to the default tools")
         return {"FINISHED"}
