@@ -8,6 +8,8 @@ background process, so it is checked here rather than left to the live run.
 import tempfile
 from pathlib import Path
 
+import bpy
+
 from checkkit import banner, check, finish, raises_value_error
 
 banner()
@@ -80,5 +82,25 @@ if config is not None:
     check("a real operator idname resolves to a bpy.ops entry", callable(op))
     check("an unknown operator is rejected",
           raises_value_error(lambda: ToolButton("X", "nope.nothing").resolve()))
+
+    # -- the addon module: import-safe, and its shape ------------------------
+
+    try:
+        from examples.toolbar_addon import bl_info, build_scene, register, unregister
+    except Exception as exc:
+        check("the addon module imports", False, f"{type(exc).__name__}: {exc}")
+    else:
+        check("the addon module imports", True)
+        check("the addon declares bl_info", isinstance(bl_info, dict) and bool(bl_info.get("name")))
+        check("register and unregister are callable",
+              callable(register) and callable(unregister))
+        check("importing the addon registers nothing", "toolbar" not in dir(bpy.ops))
+
+        scene = build_scene(default)
+        panel = scene.root.children[0] if scene.root is not None and scene.root.children else None
+        check("the addon builds a scene from a config", panel is not None)
+        check("the scene has one button per tool",
+              panel is not None and len(panel.children) == len(default.buttons),
+              f"{None if panel is None else len(panel.children)} vs {len(default.buttons)}")
 
 finish("example config")
