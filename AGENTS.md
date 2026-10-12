@@ -8,6 +8,7 @@ any Blender editor. The design lives in ARCHITECTURE.md — read it before chang
 | Path | Role |
 |---|---|
 | gui_paint_modules/ | The library code. This is the copyable unit. |
+| examples/ | Runnable hosts that use the library from outside it; see examples/toolbar_addon/. |
 | ARCHITECTURE.md | Design contract. Single source of truth. |
 | AGENTS.md | This file. How to work here. |
 

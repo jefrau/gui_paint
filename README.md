@@ -77,6 +77,12 @@ toolbar.disable()
 - **`USAGE.md`** — a how-to: concepts, building a tree, layout, icons, input, menus, custom
   nodes, and the manual test scripts.
 
+## Examples
+
+`examples/toolbar_addon/` is a runnable addon that builds a config-driven toolbar with the
+library: its tools live in a portable JSON a user can edit and move between machines. See its
+[README](examples/toolbar_addon/README.md).
+
 ## Running the checks
 
 ```sh
@@ -92,6 +98,7 @@ tests/run.sh tests/check_menu.py   # only the given checks
 | Path | Role |
 |---|---|
 | `gui_paint_modules/` | The library. This is the copyable unit. |
+| `examples/` | Runnable host examples; `toolbar_addon/` is the portable-toolbar one. |
 | `ARCHITECTURE.md` | The design contract. |
 | `USAGE.md` | How-to guide. |
 | `AGENTS.md` | How to work in this repository. |
