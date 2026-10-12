@@ -55,11 +55,10 @@ def _stage():
     overlay = StubSurface(_solved(menu))
     router.register(toolbar)
     router.register(overlay)
-    return router, toolbar_button, clicks, menu, item, actions, dismissed, toolbar, overlay
+    return router, toolbar_button, clicks, item, actions, dismissed, overlay
 
 
-(router, toolbar_button, clicks, menu, item, actions, dismissed,
- toolbar, overlay) = _stage()
+(router, toolbar_button, clicks, item, actions, dismissed, overlay) = _stage()
 
 consumed = router.handle(StubEvent("MOUSEMOVE", x=node_center(toolbar_button)[0],
                                    y=node_center(toolbar_button)[1]))
@@ -78,7 +77,7 @@ check("selecting the item runs its action", actions == ["run"], str(actions))
 check("selecting the item dismisses the menu", dismissed == [True], str(dismissed))
 check("the older button never fired", clicks == [], str(clicks))
 
-router, toolbar_button, clicks, menu, item, actions, dismissed, toolbar, overlay = _stage()
+router, toolbar_button, clicks, item, actions, dismissed, overlay = _stage()
 router.handle(StubEvent("LEFTMOUSE", "PRESS", x=2.0, y=2.0))
 consumed = router.handle(StubEvent("LEFTMOUSE", "RELEASE", x=2.0, y=2.0))
 check("a click outside the popup is consumed", consumed is True, str(consumed))
